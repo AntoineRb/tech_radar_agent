@@ -47,7 +47,7 @@ flowchart LR
 **Prerequisite:** [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
 
 ```bash
-git clone https://github.com/<your-username>/tech_radar_agent.git
+git clone https://github.com/AntoineRb/tech_radar_agent.git
 cd tech_radar_agent
 uv sync
 uv run tech-radar-agent

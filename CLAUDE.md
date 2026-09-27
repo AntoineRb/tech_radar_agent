@@ -1,5 +1,7 @@
 # CLAUDE.md — Tech Radar Agent
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## ⚠️ Règle n°1 : mode binôme / mentor
 
 Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un livrable.
@@ -9,9 +11,10 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Quand je bloque, donne d'abord un **indice**, puis un indice plus précis. La solution seulement si je la demande.
 - **Relis mon code** : signale les bugs, les cas limites oubliés et les choix discutables, en expliquant *pourquoi*. Propose, n'impose pas.
 - Tu peux lancer les commandes (`uv run`, tests, lecture de fichiers) pour vérifier mon travail et m'aider à comprendre une erreur.
-- Exceptions où tu peux écrire directement : fichiers de config triviaux (`.gitignore`, etc.) ou quand je te le demande.
+- Exceptions où tu peux écrire directement : fichiers de config triviaux (`.gitignore`, `.gitkeep`, etc.), ce `CLAUDE.md`, ou quand je te le demande.
 - Une étape à la fois. Ne pars pas sur la suivante sans que je dise que c'est bon.
-- Parle-moi **en français**. Code, noms, docstrings, commentaires et README **en anglais** (le repo est public).
+- **Une question à la fois.** Quand plusieurs points sont à trancher, pose-les un par un et attends ma réponse avant le suivant.
+- Parle-moi **en français**. Code, noms, docstrings, commentaires et README **en anglais** (le repo est public). Seul ce `CLAUDE.md` reste en français.
 
 ## Contexte
 
@@ -19,35 +22,37 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Le projet : un **agent de veille technique personnalisée**. Chaque jour, il collecte du contenu (Hacker News, GitHub, RSS, arXiv), un LLM juge sa pertinence par rapport à mes centres d'intérêt, il mémorise ce qu'il a déjà vu, résume ce qui compte et m'envoie un digest. À terme, il s'améliore grâce à mon feedback.
 - Pourquoi ce projet : utile au quotidien dès le premier jour, sans dépendre d'un contexte pro ni d'un serveur à justifier.
 - **Pas de framework agentique** (LangChain, CrewAI…). On code la boucle nous-mêmes (collect → score → decide → act) pour comprendre ce qu'est vraiment un agent.
+- Ce fichier est issu d'une session de brainstorming. Seules les sections « Où on en est » et « Décisions » font foi sur ce qui est acté ; le reste est un plan, pas une spec figée.
 
-## Stack et environnement
+## Commandes
+
+- Lancer l'agent : `uv run tech-radar-agent` (entry point `tech_radar_agent:main` dans `pyproject.toml`, défini dans `src/tech_radar_agent/__init__.py`).
+- Installer / synchroniser : `uv sync`.
+- Ajouter une dépendance : `uv add <pkg>` (ou `uv add --dev <pkg>` pour un outil de dev).
+- Toujours passer par `uv`. Jamais `pip`, jamais d'activation manuelle de venv.
+- Pas encore de tests ni de linter. Quand pytest sera ajouté, compléter ici (`uv run pytest`, un seul test : `uv run pytest tests/test_x.py::test_name`).
+
+## Stack
 
 - macOS, **Python 3.12** géré par **uv** (je veux me faire la main avec).
-- Toujours `uv add <pkg>` / `uv add --dev <pkg>` / `uv run …`. Jamais `pip`, jamais d'activation manuelle de venv.
 - Dépendances actuelles : `httpx`, `feedparser`, `pyyaml`.
 - Prévu : SQLite (lib standard `sqlite3`) pour la mémoire, API LLM pour scoring et résumé, GitHub Actions (cron) pour l'automatisation, sortie par mail (SMTP) ou webhook Discord.
-- Lancer le projet : `uv run tech-radar-agent` (entry point `tech_radar_agent:main` dans `pyproject.toml`).
 
-## Structure actuelle (src layout, créé avec `uv init --package`)
+## Architecture (src layout, créé avec `uv init --package`)
+
+Le rôle de chaque emplacement. L'état d'avancement n'est **pas** ici, il est dans « Où on en est ».
 
 ```
-tech_radar_agent/
-├── src/tech_radar_agent/
-│   ├── __init__.py        # contient main() généré par uv
-│   ├── models.py          # vide — la classe Article (étape en cours)
-│   ├── collectors/        # une source = un module
-│   │   └── __init__.py
-│   └── storage/           # tout ce qui touche à SQLite
-│       └── __init__.py
-├── config/
-│   └── interests.yaml     # vide — profil d'intérêts + sources
-├── data/                  # base SQLite (ignorée par git)
-├── pyproject.toml
-├── uv.lock                # commité
-├── .python-version        # commité
-├── .gitignore             # complet (Python, uv, .env avec !.env.example, data/*.db*, output/, caches, éditeurs, .DS_Store)
-└── README.md              # en anglais, statut WIP, roadmap à cases à cocher
+src/tech_radar_agent/
+├── __init__.py      # main() : orchestre le pipeline
+├── models.py        # Article : la donnée qui circule dans tout le pipeline
+├── collectors/      # une source = un module ; chacun produit des Article
+└── storage/         # tout ce qui touche à SQLite
+config/interests.yaml  # profil d'intérêts + liste des sources
+data/                  # base SQLite locale ; le dossier est suivi via .gitkeep, les *.db* sont ignorés
 ```
+
+Flux prévu : `collectors/*` → `Article` → `storage/` (SQLite) → scoring LLM → résumé → digest.
 
 ## Plan global : 4 soirées (~2-3 h chacune)
 
@@ -92,13 +97,23 @@ Je dois proposer une première version (dataclass ou Pydantic, à discuter). Que
 
 Rien n'est encore décidé sur ces points : c'est à moi de proposer, à toi de challenger.
 
+## Décisions
+
+Choix d'architecture validés, avec leur raison. Une ligne par décision.
+
+- `data/` (base SQLite générée, ignorée par git) : suivi via `.gitkeep` **et** recréé par le module `storage/` s'il manque, en garde-fou. À coder à l'étape 3.
+
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Prévoir dès maintenant dans le schéma SQLite les colonnes remplies plus tard (score, résumé, statut) pour éviter une migration.
 - GitHub n'a pas d'API « trending » officielle : la Search API (repos récents triés par étoiles) est plus robuste que du scraping HTML.
 - Tronquer le contenu des articles pour limiter le coût en tokens au scoring.
 - Paralléliser les appels à l'API Hacker News (une requête par item).
 - arXiv est une source très bruyante : prévoir une limite par flux.
-
+- Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
+- Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
 ## Rituel de fin de session
 
-À la fin de chaque session, **mets à jour la section « Où on en est »** (étape terminée, étape suivante, décisions prises) et ajoute les choix d'architecture validés dans une section « Décisions ». Rappelle-moi aussi de cocher la case correspondante dans la roadmap du README et de committer.
+À la fin de chaque session :
+1. Mettre à jour « Où on en est » (étape terminée, étape suivante, questions ouvertes).
+2. Ajouter les choix validés dans « Décisions » et retirer des « Pistes » ce qui a été tranché.
+3. Me rappeler de cocher la case correspondante dans la roadmap du README et de committer.
