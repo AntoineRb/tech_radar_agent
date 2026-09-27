@@ -19,6 +19,7 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 ## Contexte
 
 - Je suis développeur. J'ai terminé le cours Agents de Hugging Face (certifié) et je construis mon premier agent from scratch, en quelques soirées à côté de mon travail.
+- Je n'ai pas fait de Python depuis des années : quand une syntaxe est nouvelle pour moi, un rappel sur un exemple **différent** du projet (puis je code le mien) marche bien.
 - Le projet : un **agent de veille technique personnalisée**. Chaque jour, il collecte du contenu (Hacker News, GitHub, RSS, arXiv), un LLM juge sa pertinence par rapport à mes centres d'intérêt, il mémorise ce qu'il a déjà vu, résume ce qui compte et m'envoie un digest. À terme, il s'améliore grâce à mon feedback.
 - Pourquoi ce projet : utile au quotidien dès le premier jour, sans dépendre d'un contexte pro ni d'un serveur à justifier.
 - **Pas de framework agentique** (LangChain, CrewAI…). On code la boucle nous-mêmes (collect → score → decide → act) pour comprendre ce qu'est vraiment un agent.
@@ -61,7 +62,7 @@ Chaque soirée doit se terminer avec quelque chose qui tourne réellement.
 ### Soirée 1 — Squelette + collecte
 Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 articles bruts.
 1. ✅ Setup du projet avec uv, arborescence, `.gitignore`, README, premier push.
-2. ⏳ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline.
+2. ⏳ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline. Classe écrite ; reste l'identifiant unique.
 3. Le stockage SQLite (table `articles`, insertion sans doublons).
 4. Le premier collector : Hacker News (API Firebase officielle).
 5. Les collectors RSS (feedparser) et GitHub.
@@ -88,20 +89,30 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 ## 👉 Où on en est
 
-**Étape en cours : Soirée 1, étape 2 — la classe `Article` dans `models.py`.**
+_Dernière session : 2026-09-27._
 
-Je dois proposer une première version (dataclass ou Pydantic, à discuter). Questions de conception à me faire trancher :
-- Quels **champs communs** à toutes les sources ? Penser à ce dont le LLM aura besoin pour juger un article à la Soirée 2.
-- Où mettre les **infos spécifiques à une source** (points HN, étoiles GitHub…) sans polluer le modèle ?
-- Quel **identifiant unique**, sachant que le même lien peut arriver par deux sources différentes (et avec des paramètres de tracking différents) ?
+**Étape en cours : Soirée 1, étape 2 — fin de la classe `Article` (identifiant unique).**
 
-Rien n'est encore décidé sur ces points : c'est à moi de proposer, à toi de challenger.
+- Branche : `feature/article-model` (créée via git flow depuis `dev`, commitée et poussée). Pas encore de MR vers `dev`.
+- `models.py` contient la dataclass `Article` (voir « Décisions »). Je l'ai corrigée à la demande pour qu'elle serve de **modèle de style** pour les prochaines classes.
+
+**Reprendre par cette question (une seule à la fois) :**
+- Quel **identifiant unique** pour un article, sachant que le même lien peut arriver par deux sources différentes, avec des paramètres de tracking différents (`?utm_...`) ?
+
+**Ensuite, question ouverte à trancher avant/pendant l'étape 3 :**
+- `score` et `summary` : champs de `Article` (`None` par défaut, remplis plus tard) ou uniquement colonnes de la table SQLite ? Je sais déjà que le résumé IA sera stocké en base ; la question est seulement où il vit côté Python.
+
+**Étape suivante une fois `Article` terminé :** MR `feature/article-model` → `dev`, puis étape 3 (stockage SQLite).
 
 ## Décisions
 
 Choix d'architecture validés, avec leur raison. Une ligne par décision.
 
 - `data/` (base SQLite générée, ignorée par git) : suivi via `.gitkeep` **et** recréé par le module `storage/` s'il manque, en garde-fou. À coder à l'étape 3.
+- `Article` est une `dataclass` (pas Pydantic) : lib standard, suffisant pour l'instant.
+- `Article` décrit **ce que la collecte ramène**, avant tout traitement LLM. Champs obligatoires : `source`, `title`, `url`. Optionnels (`None`) : `author`, `content` (`None` = post sans texte), `published_at` (toutes les sources n'ont pas de date). Automatique : `fetched_at` (UTC, via `default_factory`).
+- Infos propres à une source (points HN, étoiles GitHub…) dans `extra: dict[str, Any]`, pour ne pas polluer le modèle commun.
+- Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Prévoir dès maintenant dans le schéma SQLite les colonnes remplies plus tard (score, résumé, statut) pour éviter une migration.
@@ -111,6 +122,7 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - arXiv est une source très bruyante : prévoir une limite par flux.
 - Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
+
 ## Rituel de fin de session
 
 À la fin de chaque session :
