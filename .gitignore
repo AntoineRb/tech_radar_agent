@@ -1,0 +1,38 @@
+# --- Python ---
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# --- Environnement (uv) ---
+.venv/
+# Ne PAS ignorer uv.lock ni .python-version : ils doivent être commités
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Tech Radar data ---
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+output/
+
+# --- Dev tools ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+
+# --- macOS ---
+.DS_Store
