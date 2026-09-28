@@ -91,16 +91,15 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 _Dernière session : 2026-09-28._
 
-**Étape en cours : Soirée 1, fin de l'étape 2 — `Article` terminé, reste à committer + MR.**
+**Étape en cours : Soirée 1, étape 3 — stockage SQLite.** (Étape 2 terminée et mergée dans `dev`.)
 
-- Branche : `feature/article-model` (créée via git flow depuis `dev`). Pas encore de MR vers `dev`.
 - `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
 - Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
 
 **Question reportée à la Soirée 2 (boucle de scoring) :**
 - `score` et `summary` seront stockés en base dans tous les cas (colonnes de la table `articles`, à créer dès l'étape 3). Reste à décider s'ils sont aussi des champs de la classe `Article` (`None` par défaut) ou seulement écrits par `storage/` via un `UPDATE`. Penchant initial pour les champs dans `Article`, puis hésitation. `Article` reste inchangé d'ici là.
 
-**Étape suivante :** committer, pousser, MR `feature/article-model` → `dev`. Puis étape 3 (stockage SQLite) sur une nouvelle branche feature.
+**Étape 3 codée (par Claude, à ma demande)**, branche `feature/sqlite-storage` : `storage/database.py` expose `connect(db_path)` (crée `data/` + la table) et `save_articles(conn, articles) -> int` (nombre réellement insérés). Vérifié : doublons ignorés, dates et `extra` bien relus. Reste : commit + MR vers `dev`, puis étape 4 (collector Hacker News).
 
 
 ## Décisions
@@ -112,10 +111,12 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - `Article` décrit **ce que la collecte ramène**, avant tout traitement LLM. Champs obligatoires : `source`, `title`, `url`. Optionnels (`None`) : `author`, `content` (`None` = post sans texte), `published_at` (toutes les sources n'ont pas de date). Automatique : `fetched_at` (UTC, via `default_factory`).
 - Dédup par **URL normalisée en clair** (pas de hash : plus simple à déboguer ; pas d'UUID : aléatoire, ne détecte pas les doublons). `url` reste l'URL originale (lien du digest) ; la clé normalisée est une **propriété calculée** de `Article` (jamais désynchronisée). En base : id technique `INTEGER PRIMARY KEY` + colonne clé `UNIQUE`.
 - Infos propres à une source (points HN, étoiles GitHub…) dans `extra: dict[str, Any]`, pour ne pas polluer le modèle commun.
+- Répartition du code : je code moi-même la partie « agent » (scoring, résumé, boucle, feedback). La plomberie (stockage SQLite…) peut être écrite par Claude quand je le demande ; je la relis.
+- Schéma SQLite : dates en `TEXT` ISO 8601 (lisible, triable), `extra` en `TEXT` JSON, `score INTEGER` (0-10) et `summary TEXT` à `NULL` tant que le LLM n'est pas passé. Insertion via `INSERT OR IGNORE` sur `normalized_url`. Base par défaut : `data/tech_radar.db` (chemin relatif au dossier de lancement).
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
-- Prévoir dès maintenant dans le schéma SQLite les colonnes remplies plus tard (score, résumé, statut) pour éviter une migration.
+- Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
 - GitHub n'a pas d'API « trending » officielle : la Search API (repos récents triés par étoiles) est plus robuste que du scraping HTML.
 - Tronquer le contenu des articles pour limiter le coût en tokens au scoring.
 - Paralléliser les appels à l'API Hacker News (une requête par item).
