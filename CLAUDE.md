@@ -95,7 +95,7 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 2. ✅ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline, avec la clé de dédup `normalized_url`.
 3. ✅ Le stockage SQLite (table `articles`, insertion sans doublons).
 4. ✅ Le premier collector : Hacker News (API Firebase officielle).
-5. Les collectors RSS (feedparser) et GitHub.
+5. ✅ Les collectors RSS (feedparser) et GitHub.
 6. Le point d'entrée qui orchestre tout (une source en panne ne doit pas bloquer les autres) + le contenu de `interests.yaml`.
 
 ### Soirée 2 — La boucle agentique (scoring + résumé)
@@ -124,7 +124,8 @@ _Dernière session : 2026-09-28._
 **Étape en cours : Soirée 1, étape 5 — collectors RSS et GitHub**, branche `feature/rss-github-collectors`. Étape 4 (collector HN) mergée (MR #5).
 
 - ✅ Première partie de l'étape 5 (codée par Claude) : protections de sécurité au parsing. `sanitize.py` (`clean_text`, `is_safe_url`), imposées dans `Article.__post_init__`. `fetch()`/`fetch_json()` dans `collectors/base.py` : HTTPS seulement, 5 Mo max. Le collector HN les utilise. Testé : caractères invisibles, bidi, tags Unicode, `javascript:`/`data:`/`file:` rejetés, `http://` refusé au téléchargement, limite de taille, HN réel OK.
-- Reste : collector RSS (feedparser), puis collector GitHub (Search API).
+- ✅ Collector `rss` (feedparser, testé sur Lobsters RSS 2.0, Simon Willison Atom, arXiv cs.AI + un flux piégé : `javascript:`, `<script>`, XXE, caractères invisibles) et collector `github` (Search API, `GITHUB_TOKEN` optionnel). Test global des 3 collectors : 70 articles → 67 en base (3 doublons inter-sources bien écartés).
+- Reste : relecture, commit, MR vers `dev`. Ensuite étape 6 (orchestration dans `main()` + contenu de `interests.yaml`, avec vérification de chaque flux RSS choisi).
 - À prévoir à l'étape 6 : `httpx` logge chaque requête en INFO, passer son logger en WARNING dans `main()`.
 
 - `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
@@ -147,12 +148,11 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Schéma SQLite : dates en `TEXT` ISO 8601 (lisible, triable), `extra` en `TEXT` JSON, `score INTEGER` (0-10) et `summary TEXT` à `NULL` tant que le LLM n'est pas passé. Insertion via `INSERT OR IGNORE` sur `normalized_url`. Base par défaut : `data/tech_radar.db` (chemin relatif au dossier de lancement).
 - Collectors génériques et pilotés par la config (l'agent pourra servir à autre chose que la veille tech) : classe abstraite `Collector` (`collect() -> list[Article]`), registre `COLLECTOR_TYPES`, `build_collector(dict)` passe les options au constructeur. `name` d'instance = `Article.source`. Source injoignable → exception ; item en échec → loggé et ignoré. Voir ADR 0006.
 - Sécurité imposée par construction : `Article.__post_init__` nettoie `title`/`author`/`content` (NFKC, caractères cachés supprimés, troncature 300/100/3000) et rejette les URL non `http(s)` (`ValueError`, l'item est ignoré). Les collectors téléchargent uniquement via `fetch()`/`fetch_json()` (HTTPS, 5 Mo max), jamais `client.get`. `extra` n'est pas nettoyé : passer par `clean_text()` avant de le mettre dans un prompt.
+- GitHub : Search API officielle (repos créés récemment, triés par étoiles) plutôt que du scraping de la page trending. RSS : une entrée de config par flux, chacune avec son `name` et sa `limit` (utile pour arXiv, très bruyant).
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
-- GitHub n'a pas d'API « trending » officielle : la Search API (repos récents triés par étoiles) est plus robuste que du scraping HTML.
-- arXiv est une source très bruyante : prévoir une limite par flux.
 - Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
 
