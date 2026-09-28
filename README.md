@@ -36,13 +36,13 @@ flowchart LR
 | httpx | HTTP requests to source APIs | ✅ |
 | feedparser | RSS / Atom feeds parsing | ✅ |
 | PyYAML | Interest profile and source configuration | ✅ |
-| SQLite | The agent's memory | 🔜 |
+| SQLite | The agent's memory | ✅ |
 | LLM API | Relevance scoring and summarization | 🔜 |
 | GitHub Actions | Daily schedule | 🔜 |
 
 ## Getting started
 
-> The agent does not do anything useful yet. These steps set up the development environment.
+> For now the agent only collects: it fetches the sources listed in [`config/interests.yaml`](config/interests.yaml) and stores new articles in `data/tech_radar.db`. LLM scoring comes next.
 
 **Prerequisite:** [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
 
@@ -74,7 +74,7 @@ See the [documentation](docs/README.md) for architecture details and design deci
 
 ## Roadmap
 
-- [X] **Step 1: Collection.** Project setup, `Article` model, SQLite storage, collectors for Hacker News, RSS and GitHub.
+- [x] **Step 1: Collection.** Project setup, `Article` model, SQLite storage, collectors for Hacker News, RSS and GitHub.
 - [ ] **Step 2: Agent loop.** LLM scoring against the interest profile, relevance summaries, error handling and rate limiting.
 - [ ] **Step 3: Memory and delivery.** Cross-source deduplication, sent-item tracking, daily digest by email or Discord, scheduling with GitHub Actions.
 - [ ] **Step 4: Feedback and adaptation.** 👍 / 👎 feedback on digest items, feedback-aware scoring, detection of recurring "hot topics".
