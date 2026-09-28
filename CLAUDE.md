@@ -97,10 +97,11 @@ _Dernière session : 2026-09-28._
 - `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
 - Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
 
-**Question ouverte à trancher avant/pendant l'étape 3 :**
-- `score` et `summary` : champs de `Article` (`None` par défaut, remplis plus tard) ou uniquement colonnes de la table SQLite ? Je sais déjà que le résumé IA sera stocké en base ; la question est seulement où il vit côté Python.
+**Question reportée à la Soirée 2 (boucle de scoring) :**
+- `score` et `summary` seront stockés en base dans tous les cas (colonnes de la table `articles`, à créer dès l'étape 3). Reste à décider s'ils sont aussi des champs de la classe `Article` (`None` par défaut) ou seulement écrits par `storage/` via un `UPDATE`. Penchant initial pour les champs dans `Article`, puis hésitation. `Article` reste inchangé d'ici là.
 
-**Étape suivante une fois `Article` terminé :** MR `feature/article-model` → `dev`, puis étape 3 (stockage SQLite).
+**Étape suivante :** committer, pousser, MR `feature/article-model` → `dev`. Puis étape 3 (stockage SQLite) sur une nouvelle branche feature.
+
 
 ## Décisions
 
