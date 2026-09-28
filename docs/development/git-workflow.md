@@ -26,4 +26,5 @@ Do **not** use `git flow feature finish`, because it merges locally and skips th
 |---|---|---|
 | #2 | `feature/article-model` | `Article` dataclass |
 | #3 | `feature/article-model` | `normalized_url` deduplication key |
-| — | `feature/sqlite-storage` | SQLite storage (in progress) |
+| #4 | `feature/sqlite-storage` | SQLite storage |
+| — | `feature/hackernews-collector` | Collector base class and Hacker News collector (in progress) |

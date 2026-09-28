@@ -9,6 +9,8 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0003](0003-dedup-by-normalized-url.md) | Deduplicate articles by normalized URL | Accepted |
 | [0004](0004-source-specific-data-in-extra.md) | Keep source-specific data in an `extra` dict | Accepted |
 | [0005](0005-sqlite-schema.md) | SQLite schema and type mapping | Accepted |
+| [0006](0006-pluggable-collectors.md) | Pluggable, config-driven collectors | Accepted |
+| [0007](0007-security-baseline.md) | Security baseline: trusted dependencies, verified sources, untrusted content | Accepted |
 
 ## Template
 
