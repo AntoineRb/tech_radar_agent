@@ -8,7 +8,7 @@ An `Article` describes **what a collector brings back**, before any LLM processi
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `source` | `str` | yes | Collector name: `"hackernews"`, `"github"`, `"rss"`, `"arxiv"`. |
+| `source` | `str` | yes | Name of the collector instance: `"hackernews"`, `"hn-best"`, `"rss-lobsters"`… (see [collectors](collectors.md)). |
 | `title` | `str` | yes | |
 | `url` | `str` | yes | Original URL, used as the link in the digest. |
 | `author` | `str \| None` | no | |
