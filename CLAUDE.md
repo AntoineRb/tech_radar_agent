@@ -122,7 +122,7 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 _Dernière session : 2026-09-28._
 
-**🎉 Soirée 1 terminée (code) : étape 6 — point d'entrée**, branche `feature/entrypoint` (codée par Claude). Reste : relecture, commit, MR vers `dev`, cocher « Step 1 » dans la roadmap du README.
+**🎉 Soirée 1 terminée (code) : étape 6 — point d'entrée**, branche `feature/entrypoint` (codée par Claude), commitée. Reste : MR vers `dev` et merge. README déjà mis à jour (Step 1 cochée).
 
 - `main()` : charge la config (`config.py`), construit tous les collectors (erreur de config → arrêt avant tout appel réseau, code 2), les lance un par un (source en panne → loggée et ignorée), sauvegarde par source, résumé final. Code 1 si toutes les sources échouent. Logger `httpx` passé en WARNING.
 - `interests.yaml` : profil (`about`, `interests.high/medium/low`, `not_interested`) + 17 sources vérifiées le 2026-09-28 (HN, Lobsters, 2 recherches GitHub, 13 flux officiels : IA, Python, JS/TS, Apple, Nvidia, Microsoft/GitHub). Écartés : blog V8 (inactif depuis 2025), ancien Blogspot Python Insider (a déménagé).
@@ -157,6 +157,8 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
 - Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
+- Tests pytest : aucun test automatisé pour l'instant. Tout a été vérifié par des scripts ponctuels. Candidats prioritaires : `normalize_url`, `sanitize.clean_text` / `is_safe_url` (caractères invisibles, `javascript:`…), collector RSS sur un flux piégé (XXE, `<script>`, lien manquant), `main()` sur les configs invalides (codes de sortie). Nécessite `uv add --dev pytest` (dépendance à valider selon les règles de sécurité).
+- Premier run : 211 articles d'un coup (les flux renvoient leur historique). Les runs suivants n'apportent que les nouveautés. À surveiller à la Soirée 2 pour le coût du scoring du premier run (limiter aux articles récents ?).
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
 
 ## Rituel de fin de session
