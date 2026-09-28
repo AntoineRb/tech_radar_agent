@@ -28,4 +28,5 @@ Do **not** use `git flow feature finish`, because it merges locally and skips th
 | #3 | `feature/article-model` | `normalized_url` deduplication key |
 | #4 | `feature/sqlite-storage` | SQLite storage |
 | #5 | `feature/hackernews-collector` | Collector base class, Hacker News collector, security rules |
-| — | `feature/rss-github-collectors` | Parsing-time security, RSS and GitHub collectors (in progress) |
+| #6 | `feature/rss-github-collectors` | Parsing-time security, RSS and GitHub collectors, interest profile |
+| — | `feature/entrypoint` | `main()` orchestration and source list (in progress) |

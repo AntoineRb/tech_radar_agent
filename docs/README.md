@@ -5,6 +5,7 @@ Technical documentation for Tech Radar Agent. For a quick introduction, see the 
 ```text
 docs/
 ├── README.md                 # this index
+├── configuration.md          # interests.yaml: interest profile and sources
 ├── security.md               # security rules: dependencies, sources, prompt injection
 ├── architecture/
 │   ├── overview.md           # pipeline and code layout
@@ -17,6 +18,10 @@ docs/
     ├── setup.md              # install, run, add dependencies
     └── git-workflow.md       # branches and merge requests
 ```
+
+## Configuration
+
+[Configuration](configuration.md): how to describe your interests and choose your sources.
 
 ## Security
 
