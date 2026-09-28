@@ -62,7 +62,7 @@ Chaque soirée doit se terminer avec quelque chose qui tourne réellement.
 ### Soirée 1 — Squelette + collecte
 Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 articles bruts.
 1. ✅ Setup du projet avec uv, arborescence, `.gitignore`, README, premier push.
-2. ⏳ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline. Classe écrite ; reste l'identifiant unique.
+2. ✅ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline, avec la clé de dédup `normalized_url`.
 3. Le stockage SQLite (table `articles`, insertion sans doublons).
 4. Le premier collector : Hacker News (API Firebase officielle).
 5. Les collectors RSS (feedparser) et GitHub.
@@ -89,17 +89,15 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 ## 👉 Où on en est
 
-_Dernière session : 2026-09-27._
+_Dernière session : 2026-09-28._
 
-**Étape en cours : Soirée 1, étape 2 — fin de la classe `Article` (identifiant unique).**
+**Étape en cours : Soirée 1, fin de l'étape 2 — `Article` terminé, reste à committer + MR.**
 
-- Branche : `feature/article-model` (créée via git flow depuis `dev`, commitée et poussée). Pas encore de MR vers `dev`.
-- `models.py` contient la dataclass `Article` (voir « Décisions »). Je l'ai corrigée à la demande pour qu'elle serve de **modèle de style** pour les prochaines classes.
+- Branche : `feature/article-model` (créée via git flow depuis `dev`). Pas encore de MR vers `dev`.
+- `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
+- Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
 
-**Reprendre par cette question (une seule à la fois) :**
-- Quel **identifiant unique** pour un article, sachant que le même lien peut arriver par deux sources différentes, avec des paramètres de tracking différents (`?utm_...`) ?
-
-**Ensuite, question ouverte à trancher avant/pendant l'étape 3 :**
+**Question ouverte à trancher avant/pendant l'étape 3 :**
 - `score` et `summary` : champs de `Article` (`None` par défaut, remplis plus tard) ou uniquement colonnes de la table SQLite ? Je sais déjà que le résumé IA sera stocké en base ; la question est seulement où il vit côté Python.
 
 **Étape suivante une fois `Article` terminé :** MR `feature/article-model` → `dev`, puis étape 3 (stockage SQLite).
@@ -111,6 +109,7 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - `data/` (base SQLite générée, ignorée par git) : suivi via `.gitkeep` **et** recréé par le module `storage/` s'il manque, en garde-fou. À coder à l'étape 3.
 - `Article` est une `dataclass` (pas Pydantic) : lib standard, suffisant pour l'instant.
 - `Article` décrit **ce que la collecte ramène**, avant tout traitement LLM. Champs obligatoires : `source`, `title`, `url`. Optionnels (`None`) : `author`, `content` (`None` = post sans texte), `published_at` (toutes les sources n'ont pas de date). Automatique : `fetched_at` (UTC, via `default_factory`).
+- Dédup par **URL normalisée en clair** (pas de hash : plus simple à déboguer ; pas d'UUID : aléatoire, ne détecte pas les doublons). `url` reste l'URL originale (lien du digest) ; la clé normalisée est une **propriété calculée** de `Article` (jamais désynchronisée). En base : id technique `INTEGER PRIMARY KEY` + colonne clé `UNIQUE`.
 - Infos propres à une source (points HN, étoiles GitHub…) dans `extra: dict[str, Any]`, pour ne pas polluer le modèle commun.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
