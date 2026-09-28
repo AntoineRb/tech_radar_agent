@@ -3,8 +3,15 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from tech_radar_agent.sanitize import clean_text, is_safe_url
+
 # Query parameters that only track where a click came from, never which page it is.
 TRACKING_PARAMS = {"fbclid", "gclid", "ref", "ref_src", "mc_cid", "mc_eid"}
+
+# Maximum lengths of collected text. Content is cut to bound the LLM token cost.
+MAX_TITLE_LENGTH = 300
+MAX_AUTHOR_LENGTH = 100
+MAX_CONTENT_LENGTH = 3000
 
 def normalize_url(url: str) -> str:
     """Return a canonical form of `url`, used as a deduplication key."""
@@ -44,6 +51,17 @@ class Article:
 
     # Source-specific data (HN points, GitHub stars...), kept out of the common schema.
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Collected data is untrusted (docs/security.md): enforce the rules here so no collector can skip them.
+        if not is_safe_url(self.url):
+            raise ValueError(f"Unsafe or invalid URL: {self.url!r}")
+        title = clean_text(self.title, MAX_TITLE_LENGTH)
+        if title is None:
+            raise ValueError("Article title is empty")
+        self.title = title
+        self.author = clean_text(self.author, MAX_AUTHOR_LENGTH)
+        self.content = clean_text(self.content, MAX_CONTENT_LENGTH)
 
     @property
     def normalized_url(self) -> str:

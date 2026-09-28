@@ -1,12 +1,21 @@
 import html
+import json
 import re
 from abc import ABC, abstractmethod
+from typing import Any
 
 import httpx
 
 from tech_radar_agent.models import Article
 
 USER_AGENT = "tech-radar-agent/0.1 (+https://github.com/AntoineRb/tech_radar_agent)"
+
+# Protects against huge or endless responses (and compression bombs: the limit applies after decompression).
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024
+
+
+class UnsafeResponseError(httpx.HTTPError):
+    """A response refused by the security rules: not HTTPS, or too large."""
 
 
 class Collector(ABC):
@@ -42,8 +51,32 @@ def http_client() -> httpx.Client:
     )
 
 
+def fetch(client: httpx.Client, url: str) -> bytes:
+    """GET `url` over HTTPS only, reading at most MAX_RESPONSE_BYTES. Use this instead of `client.get`."""
+    if not url.startswith("https://"):
+        raise UnsafeResponseError(f"Refusing non-HTTPS URL: {url}")
+    with client.stream("GET", url) as response:
+        response.raise_for_status()
+        if response.url.scheme != "https":  # A redirect may have downgraded the connection.
+            raise UnsafeResponseError(f"Redirected to non-HTTPS URL: {response.url}")
+        body = bytearray()
+        for chunk in response.iter_bytes():
+            body += chunk
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise UnsafeResponseError(f"Response larger than {MAX_RESPONSE_BYTES} bytes: {url}")
+    return bytes(body)
+
+
+def fetch_json(client: httpx.Client, url: str) -> Any:
+    """Like `fetch`, then decode the body as JSON."""
+    return json.loads(fetch(client, url))
+
+
 def html_to_text(value: str | None) -> str | None:
-    """Turn an HTML snippet into plain text for the LLM. Return None if nothing is left."""
+    """Turn an HTML snippet into plain text. Return None if nothing is left.
+
+    Invisible characters and length are handled later by Article itself.
+    """
     if not value:
         return None
     text = re.sub(r"<[^>]+>", " ", value)  # Drop tags, keep their content.
