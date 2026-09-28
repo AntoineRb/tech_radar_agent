@@ -17,6 +17,16 @@ An `Article` describes **what a collector brings back**, before any LLM processi
 | `fetched_at` | `datetime` | auto | UTC timestamp set when the object is created. |
 | `extra` | `dict[str, Any]` | auto | Source-specific data (HN points, GitHub stars…). Empty by default. |
 
+### Validation on creation
+
+Collected data is untrusted, so `Article.__post_init__` checks it before the object exists (see [security](../security.md)):
+
+- `url` must use `http` or `https` and have a host. Otherwise `ValueError` is raised.
+- `title` (max 300 chars), `author` (max 100) and `content` (max 3,000) are cleaned by `sanitize.clean_text()`: hidden Unicode characters are removed, the text is normalized, whitespace is collapsed and the text is truncated.
+- An empty title after cleaning raises `ValueError`.
+
+Collectors catch the `ValueError`, log it and skip the item.
+
 Source-specific data goes into `extra` so the shared schema stays small (see [ADR 0004](../decisions/0004-source-specific-data-in-extra.md)).
 
 The LLM results (`score`, `summary`) are not fields of `Article` yet. They are stored in the database. Whether they should also live on `Article` will be decided when the scoring loop is built.
