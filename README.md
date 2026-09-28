@@ -66,8 +66,11 @@ tech_radar_agent/
 ├── config/
 │   └── interests.yaml   # your interest profile and sources
 ├── data/                # local SQLite database (git-ignored)
+├── docs/                # architecture, decision log, dev guides
 └── pyproject.toml
 ```
+
+See the [documentation](docs/README.md) for architecture details and design decisions.
 
 ## Roadmap
 

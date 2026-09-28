@@ -51,7 +51,10 @@ src/tech_radar_agent/
 └── storage/         # tout ce qui touche à SQLite
 config/interests.yaml  # profil d'intérêts + liste des sources
 data/                  # base SQLite locale ; le dossier est suivi via .gitkeep, les *.db* sont ignorés
+docs/                  # doc technique en anglais : architecture/, decisions/ (ADR), development/
 ```
+
+Tenir `docs/` à jour à chaque étape terminée : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
 
 Flux prévu : `collectors/*` → `Article` → `storage/` (SQLite) → scoring LLM → résumé → digest.
 
@@ -128,5 +131,5 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 
 À la fin de chaque session :
 1. Mettre à jour « Où on en est » (étape terminée, étape suivante, questions ouvertes).
-2. Ajouter les choix validés dans « Décisions » et retirer des « Pistes » ce qui a été tranché.
+2. Ajouter les choix validés dans « Décisions » et retirer des « Pistes » ce qui a été tranché. Mettre à jour `docs/` en conséquence.
 3. Me rappeler de cocher la case correspondante dans la roadmap du README et de committer.
