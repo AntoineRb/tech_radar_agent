@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from tech_radar_agent.collectors.base import Collector, html_to_text, http_client
+from tech_radar_agent.collectors.base import Collector, fetch_json, html_to_text, http_client
 from tech_radar_agent.models import Article
 
 logger = logging.getLogger(__name__)
@@ -46,23 +46,27 @@ class HackerNewsCollector(Collector):
 
     def collect(self) -> list[Article]:
         with http_client() as client:
-            response = client.get(f"{API_URL}/{FEEDS[self.feed]}.json")
-            response.raise_for_status()
-            story_ids = response.json()[: self.limit]
+            story_ids = fetch_json(client, f"{API_URL}/{FEEDS[self.feed]}.json")[: self.limit]
 
             with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
                 items = list(pool.map(lambda story_id: self._fetch_item(client, story_id), story_ids))
 
-        articles = [self._to_article(item) for item in items if self._is_wanted(item)]
+        articles = []
+        for item in items:
+            if not self._is_wanted(item):
+                continue
+            try:
+                articles.append(self._to_article(item))
+            except ValueError as error:  # Rejected by Article's security checks.
+                logger.warning("%s: skipping item %s (%s)", self.name, item["id"], error)
+
         logger.info("%s: %d articles from %d stories", self.name, len(articles), len(story_ids))
         return articles
 
     def _fetch_item(self, client: httpx.Client, item_id: int) -> dict[str, Any] | None:
         try:
-            response = client.get(f"{API_URL}/item/{item_id}.json")
-            response.raise_for_status()
-            return response.json()  # null for unknown ids.
-        except httpx.HTTPError as error:
+            return fetch_json(client, f"{API_URL}/item/{item_id}.json")  # null for unknown ids.
+        except (httpx.HTTPError, ValueError) as error:  # ValueError: invalid JSON.
             logger.warning("%s: skipping item %s (%s)", self.name, item_id, error)
             return None
 

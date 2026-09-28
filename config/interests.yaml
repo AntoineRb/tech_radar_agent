@@ -1,0 +1,30 @@
+# Interest profile used by the LLM to score each collected article.
+# Topics are free text: the LLM matches meaning, not exact keywords,
+# so "AI agents" also covers "agentic workflows" or "tool-using LLMs".
+
+profile:
+  # Who you are, in a few sentences. Gives the LLM the context behind the topics.
+  about: >
+    Software developer. Building AI agents from scratch in Python and following
+    the tech industry closely. Interested in hands-on, technical content over hype.
+
+  # Topics by priority. The scoring prompt can weigh them differently.
+  interests:
+    high:
+      - AI agents (architecture, tool use, memory, evaluation)
+      - Large language models (new models, benchmarks, prompting, fine-tuning)
+      - Python (language, tooling, notable libraries)
+    medium:
+      - JavaScript and TypeScript (language, runtimes, frameworks)
+      - Apple (platforms, developer tools, hardware)
+      - Nvidia (GPUs, AI hardware, CUDA)
+      - Microsoft (developer tools, AI products, open source)
+    low:
+      - Developer productivity and tooling
+      - Open source projects gaining traction
+
+  # Topics to push down, even if they match an interest above.
+  not_interested:
+    - Crypto and blockchain
+    - Funding rounds and company valuations without technical content
+    - Opinion pieces with no technical substance

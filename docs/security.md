@@ -57,12 +57,19 @@ Last audit on 2026-09-28: `pip-audit` found no known vulnerabilities.
 
 Collected content is **data to evaluate, never instructions to follow**. There is no single fix, so several layers are stacked.
 
-### At parsing (collectors)
+### At parsing (collectors and `Article`)
 
-- Convert HTML to plain text (`html_to_text`).
-- Strip invisible and control characters: zero-width characters, bidirectional overrides, and other Unicode format characters used to hide text.
-- Truncate the text to a maximum length. This also limits the token cost.
-- Validate the URL scheme.
+- Collectors convert HTML to plain text (`html_to_text`).
+- Collectors never call `client.get` directly. They use `fetch()` / `fetch_json()`, which refuse non-HTTPS URLs (including after a redirect) and responses larger than 5 MB.
+- `Article.__post_init__` enforces the rest, so no collector can skip it. Every article goes through these checks when it is created:
+  - `title`, `author` and `content` go through `clean_text()` in `sanitize.py`:
+    - NFKC normalization, which folds look-alike characters such as fullwidth letters;
+    - removal of hidden characters: format characters (`Cf`: zero-width, bidirectional overrides, the invisible "tag" characters used for ASCII smuggling), private-use characters and surrogates;
+    - control characters replaced with spaces and whitespace collapsed;
+    - truncation: title 300, author 100, content 3,000 characters.
+  - `url` must be `http` or `https` and have a host. Otherwise `Article` raises `ValueError` and the collector skips the item.
+  - An empty title after cleaning also raises `ValueError`.
+- `extra` is **not** sanitized. It is for metadata. Any `extra` value that ends up in a prompt must go through `clean_text()` first.
 
 ### At prompting (scoring and summary)
 
@@ -82,9 +89,11 @@ Collected content is **data to evaluate, never instructions to follow**. There i
 |---|---|
 | Dependencies vetted and locked with hashes | ✅ |
 | Dependency audit | ✅ Manual, before merge requests |
-| HTTPS sources with timeout | ✅ Hacker News collector |
-| Maximum response size | 🔜 Step 5 (`http_client`) |
-| Invisible character stripping and truncation | 🔜 Step 5 (`html_to_text`) |
-| URL scheme validation | 🔜 Step 5 |
+| HTTPS only, even after redirects, with a timeout | ✅ `collectors/base.py`: `fetch()` |
+| No XML external entities (XXE) in feeds | ✅ Disabled by `feedparser`, checked with a crafted feed |
+| GitHub token from the environment only | ✅ `collectors/github.py` (optional `GITHUB_TOKEN`) |
+| Maximum response size (5 MB, counted after decompression) | ✅ `collectors/base.py`: `fetch()` |
+| Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
+| URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |
 | Prompt delimiting, output validation, no tools | 🔜 Scoring loop |
 | Output escaping in the digest | 🔜 Delivery |

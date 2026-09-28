@@ -1,11 +1,13 @@
 from typing import Any
 
 from tech_radar_agent.collectors.base import Collector
+from tech_radar_agent.collectors.github import GitHubCollector
 from tech_radar_agent.collectors.hackernews import HackerNewsCollector
+from tech_radar_agent.collectors.rss import RssCollector
 
 # Every available collector, by the `type` used in the config. Register new sources here.
 COLLECTOR_TYPES: dict[str, type[Collector]] = {
-    cls.type: cls for cls in (HackerNewsCollector,)
+    cls.type: cls for cls in (GitHubCollector, HackerNewsCollector, RssCollector)
 }
 
 
@@ -22,4 +24,11 @@ def build_collector(source_config: dict[str, Any]) -> Collector:
     return COLLECTOR_TYPES[type_name](**options)
 
 
-__all__ = ["COLLECTOR_TYPES", "Collector", "HackerNewsCollector", "build_collector"]
+__all__ = [
+    "COLLECTOR_TYPES",
+    "Collector",
+    "GitHubCollector",
+    "HackerNewsCollector",
+    "RssCollector",
+    "build_collector",
+]
