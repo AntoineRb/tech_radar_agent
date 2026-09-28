@@ -27,7 +27,8 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 
 ## Commandes
 
-- Lancer l'agent : `uv run tech-radar-agent` (entry point `tech_radar_agent:main` dans `pyproject.toml`, défini dans `src/tech_radar_agent/__init__.py`).
+- Lancer l'agent : `uv run tech-radar-agent` depuis la racine du repo (entry point `tech_radar_agent:main` dans `pyproject.toml`, défini dans `src/tech_radar_agent/__init__.py`). Lit `config/interests.yaml`, écrit dans `data/tech_radar.db`. Codes de sortie : 0 OK (même si certaines sources échouent), 1 toutes les sources en échec, 2 config invalide.
+- Voir la base : `sqlite3 data/tech_radar.db "SELECT source, count(*) FROM articles GROUP BY source"`.
 - Installer / synchroniser : `uv sync`.
 - Ajouter une dépendance : `uv add <pkg>` (ou `uv add --dev <pkg>` pour un outil de dev).
 - Toujours passer par `uv`. Jamais `pip`, jamais d'activation manuelle de venv.
@@ -96,7 +97,7 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 3. ✅ Le stockage SQLite (table `articles`, insertion sans doublons).
 4. ✅ Le premier collector : Hacker News (API Firebase officielle).
 5. ✅ Les collectors RSS (feedparser) et GitHub.
-6. Le point d'entrée qui orchestre tout (une source en panne ne doit pas bloquer les autres) + le contenu de `interests.yaml`.
+6. ✅ Le point d'entrée qui orchestre tout (une source en panne ne doit pas bloquer les autres) + le contenu de `interests.yaml`.
 
 ### Soirée 2 — La boucle agentique (scoring + résumé)
 - Prompt de scoring : mon profil + l'article → score de pertinence 0-10 + justification courte.
@@ -121,12 +122,13 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 _Dernière session : 2026-09-28._
 
-**Étape en cours : Soirée 1, étape 5 — collectors RSS et GitHub**, branche `feature/rss-github-collectors`. Étape 4 (collector HN) mergée (MR #5).
+**🎉 Soirée 1 terminée (code) : étape 6 — point d'entrée**, branche `feature/entrypoint` (codée par Claude). Reste : relecture, commit, MR vers `dev`, cocher « Step 1 » dans la roadmap du README.
 
-- ✅ Première partie de l'étape 5 (codée par Claude) : protections de sécurité au parsing. `sanitize.py` (`clean_text`, `is_safe_url`), imposées dans `Article.__post_init__`. `fetch()`/`fetch_json()` dans `collectors/base.py` : HTTPS seulement, 5 Mo max. Le collector HN les utilise. Testé : caractères invisibles, bidi, tags Unicode, `javascript:`/`data:`/`file:` rejetés, `http://` refusé au téléchargement, limite de taille, HN réel OK.
-- ✅ Collector `rss` (feedparser, testé sur Lobsters RSS 2.0, Simon Willison Atom, arXiv cs.AI + un flux piégé : `javascript:`, `<script>`, XXE, caractères invisibles) et collector `github` (Search API, `GITHUB_TOKEN` optionnel). Test global des 3 collectors : 70 articles → 67 en base (3 doublons inter-sources bien écartés).
-- Reste : relecture, commit, MR vers `dev`. Ensuite étape 6 (orchestration dans `main()` + contenu de `interests.yaml`, avec vérification de chaque flux RSS choisi).
-- À prévoir à l'étape 6 : `httpx` logge chaque requête en INFO, passer son logger en WARNING dans `main()`.
+- `main()` : charge la config (`config.py`), construit tous les collectors (erreur de config → arrêt avant tout appel réseau, code 2), les lance un par un (source en panne → loggée et ignorée), sauvegarde par source, résumé final. Code 1 si toutes les sources échouent. Logger `httpx` passé en WARNING.
+- `interests.yaml` : profil (`about`, `interests.high/medium/low`, `not_interested`) + 17 sources vérifiées le 2026-09-28 (HN, Lobsters, 2 recherches GitHub, 13 flux officiels : IA, Python, JS/TS, Apple, Nvidia, Microsoft/GitHub). Écartés : blog V8 (inactif depuis 2025), ancien Blogspot Python Insider (a déménagé).
+- Premier vrai run : 215 articles, 211 nouveaux en ~7 s ; second run : 0 nouveau. Pannes testées : source HS, DNS inconnu, toutes les sources HS, nom en double, type inconnu, option mal orthographiée, config vide ou absente, tag YAML malveillant (refusé, rien d'exécuté).
+
+**Prochaine étape : Soirée 2 — la boucle agentique (c'est moi qui code).** Premier point à trancher : le modèle LLM (local ou API, lequel), voir « Pistes ».
 
 - `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
 - Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
@@ -149,6 +151,7 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Collectors génériques et pilotés par la config (l'agent pourra servir à autre chose que la veille tech) : classe abstraite `Collector` (`collect() -> list[Article]`), registre `COLLECTOR_TYPES`, `build_collector(dict)` passe les options au constructeur. `name` d'instance = `Article.source`. Source injoignable → exception ; item en échec → loggé et ignoré. Voir ADR 0006.
 - Sécurité imposée par construction : `Article.__post_init__` nettoie `title`/`author`/`content` (NFKC, caractères cachés supprimés, troncature 300/100/3000) et rejette les URL non `http(s)` (`ValueError`, l'item est ignoré). Les collectors téléchargent uniquement via `fetch()`/`fetch_json()` (HTTPS, 5 Mo max), jamais `client.get`. `extra` n'est pas nettoyé : passer par `clean_text()` avant de le mettre dans un prompt.
 - GitHub : Search API officielle (repos créés récemment, triés par étoiles) plutôt que du scraping de la page trending. RSS : une entrée de config par flux, chacune avec son `name` et sa `limit` (utile pour arXiv, très bruyant).
+- Orchestration : config validée en entier avant tout appel réseau (fail fast) ; ensuite chaque source est isolée (`except Exception` uniquement à ce niveau) ; sauvegarde après chaque source. Sources lancées séquentiellement (~7 s pour 17, suffisant). Chemins relatifs au dossier de lancement.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)

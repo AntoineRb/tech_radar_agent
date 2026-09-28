@@ -28,3 +28,92 @@ profile:
     - Crypto and blockchain
     - Funding rounds and company valuations without technical content
     - Opinion pieces with no technical substance
+
+# Where articles come from. `type` picks the collector, every other key is one of its options
+# (see docs/architecture/collectors.md). `name` is stored as the article source.
+# Security rule: official APIs and publisher feeds only, over HTTPS (see docs/security.md).
+# Feeds checked on 2026-09-28: all respond, recent posts, served from the publisher's own domain.
+sources:
+  # --- Aggregators ---
+  - type: hackernews
+    feed: top
+    limit: 40
+    min_points: 30
+  - type: rss
+    name: lobsters
+    url: https://lobste.rs/rss
+    limit: 20
+
+  # --- GitHub ---
+  - type: github
+    name: github-trending
+    limit: 20
+  - type: github
+    name: github-ai-python
+    query: "language:python topic:llm"
+    min_stars: 20
+    limit: 10
+
+  # --- AI ---
+  - type: rss
+    name: simon-willison
+    url: https://simonwillison.net/atom/everything/
+    limit: 10
+  - type: rss
+    name: huggingface-blog
+    url: https://huggingface.co/blog/feed.xml
+    limit: 10
+  - type: rss
+    name: openai-news
+    url: https://openai.com/news/rss.xml
+    limit: 10
+  - type: rss
+    name: arxiv-cs-ai
+    url: https://rss.arxiv.org/rss/cs.AI
+    limit: 15  # Hundreds of papers a day: keep this low.
+
+  # --- Python ---
+  - type: rss
+    name: python-insider
+    url: https://blog.python.org/feeds/posts/default
+    limit: 10
+  - type: rss
+    name: realpython
+    url: https://realpython.com/atom.xml
+    limit: 10
+
+  # --- JavaScript / TypeScript ---
+  - type: rss
+    name: nodejs-blog
+    url: https://nodejs.org/en/feed/blog.xml
+    limit: 10
+  - type: rss
+    name: typescript-blog
+    url: https://devblogs.microsoft.com/typescript/feed/
+    limit: 10
+
+  # --- Apple ---
+  - type: rss
+    name: apple-developer-news
+    url: https://developer.apple.com/news/rss/news.rss
+    limit: 10
+  - type: rss
+    name: swift-blog
+    url: https://www.swift.org/atom.xml
+    limit: 10
+
+  # --- Nvidia ---
+  - type: rss
+    name: nvidia-developer-blog
+    url: https://developer.nvidia.com/blog/feed
+    limit: 10
+
+  # --- Microsoft / GitHub ---
+  - type: rss
+    name: microsoft-devblogs
+    url: https://devblogs.microsoft.com/feed/
+    limit: 10
+  - type: rss
+    name: github-blog
+    url: https://github.blog/feed/
+    limit: 10
