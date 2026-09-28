@@ -90,6 +90,8 @@ Collected content is **data to evaluate, never instructions to follow**. There i
 | Dependencies vetted and locked with hashes | ✅ |
 | Dependency audit | ✅ Manual, before merge requests |
 | HTTPS only, even after redirects, with a timeout | ✅ `collectors/base.py`: `fetch()` |
+| No XML external entities (XXE) in feeds | ✅ Disabled by `feedparser`, checked with a crafted feed |
+| GitHub token from the environment only | ✅ `collectors/github.py` (optional `GITHUB_TOKEN`) |
 | Maximum response size (5 MB, counted after decompression) | ✅ `collectors/base.py`: `fetch()` |
 | Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
 | URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |

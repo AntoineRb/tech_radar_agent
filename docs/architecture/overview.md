@@ -17,8 +17,8 @@ flowchart LR
 |---|---|---|
 | Data model | ✅ Done | `models.py` |
 | Storage | ✅ Done | `storage/` |
-| Collection: Hacker News | ✅ Done | `collectors/hackernews.py` |
-| Collection: RSS, GitHub | 🔜 Next | `collectors/` |
+| Collection: Hacker News, RSS / Atom, GitHub | ✅ Done | `collectors/` |
+| Orchestration (`main()`) and config | 🔜 Next | `__init__.py`, `config/interests.yaml` |
 | Scoring and summary | Planned | — |
 | Digest and delivery | Planned | — |
 | Feedback | Planned | — |
@@ -35,7 +35,9 @@ src/tech_radar_agent/
 ├── collectors/
 │   ├── __init__.py  # registry: config type -> collector class, build_collector()
 │   ├── base.py      # Collector base class, shared HTTP client and helpers
-│   └── hackernews.py
+│   ├── github.py
+│   ├── hackernews.py
+│   └── rss.py
 └── storage/
     ├── __init__.py  # public API: connect, save_articles
     └── database.py  # SQLite schema and queries
