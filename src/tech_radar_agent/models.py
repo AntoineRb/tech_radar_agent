@@ -30,7 +30,7 @@ class Article:
     """A piece of content collected from any source, before any LLM processing."""
 
     # Required fields first: every collector must provide them.
-    source: str  # Collector name, e.g. "hackernews", "github", "rss", "arxiv".
+    source: str  # Name of the collector instance, e.g. "hackernews", "hn-best", "rss-lobsters".
     title: str
     url: str
 
