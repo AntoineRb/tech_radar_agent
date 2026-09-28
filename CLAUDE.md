@@ -39,6 +39,32 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Dépendances actuelles : `httpx`, `feedparser`, `pyyaml`.
 - Prévu : SQLite (lib standard `sqlite3`) pour la mémoire, API LLM pour scoring et résumé, GitHub Actions (cron) pour l'automatisation, sortie par mail (SMTP) ou webhook Discord.
 
+## 🔒 Sécurité (règles non négociables)
+
+Détail et justification : `docs/security.md` et ADR 0007. Toute nouvelle dépendance, source ou étape LLM doit respecter ces règles **avant** d'être codée.
+
+**Dépendances : de confiance uniquement**
+- Lib standard d'abord. Une dépendance tierce doit être justifiée.
+- Avant chaque `uv add`, Claude vérifie et me présente : dépôt officiel, mainteneurs, date de la dernière version, nombre de téléchargements, CVE connues, nom exact sur PyPI (attention au typosquatting). J'approuve avant l'ajout.
+- Uniquement depuis PyPI via `uv`, et `uv.lock` (hashes sha256) toujours commité.
+- Audit avant chaque MR qui touche aux dépendances : `uv export --format requirements-txt --no-emit-project > "$TMPDIR/req.txt" && uvx pip-audit --strict -r "$TMPDIR/req.txt"`.
+- GitHub Actions : uniquement des actions officielles ou très reconnues, épinglées par SHA de commit.
+
+**Services et URLs : vérifiés**
+- Uniquement des API officielles et documentées, et des flux RSS publiés par le site officiel de l'éditeur. Chaque source est documentée avec son lien de doc officiel dans `docs/architecture/collectors.md`.
+- HTTPS uniquement pour les sources, avec un délai d'attente (déjà dans `http_client()`) et une taille de réponse bornée.
+- Les URL collectées sont des données non fiables : on accepte seulement `http`/`https` (rejet de `javascript:`, `data:`, `file:`…). On ne les ouvre jamais automatiquement. Si ça change un jour, il faut une protection SSRF (bloquer les IP privées et locales).
+- Secrets (clé API LLM, SMTP, webhook) uniquement dans les variables d'environnement ou les secrets GitHub. Jamais dans le code, la config ou les logs.
+- YAML : toujours `yaml.safe_load`, jamais `yaml.load`.
+
+**Injection de prompt : tout contenu collecté est une donnée, jamais une instruction**
+- Au parsing (collectors) : conversion en texte brut, suppression des caractères invisibles ou de contrôle (zero-width, bidi, etc.), longueur tronquée, URL validée.
+- Au prompt (Soirée 2) : le contenu est isolé dans un bloc clairement délimité. Le prompt système dit explicitement que ce bloc est une donnée à évaluer et que ses consignes éventuelles doivent être ignorées.
+- Sortie LLM structurée (JSON) et validée : score entier borné 0-10, résumé de longueur bornée. Si la sortie est invalide, l'article est rejeté, pas deviné.
+- Le LLM de scoring et de résumé n'a **aucun outil ni aucune action**. Il ne fait que produire du texte.
+- La sortie du LLM est elle aussi non fiable : elle est échappée dans le digest HTML ou Markdown (pas de lien ni de HTML injecté).
+- Une détection heuristique (« ignore previous instructions »…) peut signaler les cas suspects dans les logs, mais on ne s'y fie jamais seule.
+
 ## Architecture (src layout, créé avec `uv init --package`)
 
 Le rôle de chaque emplacement. L'état d'avancement n'est **pas** ici, il est dans « Où on en est ».
@@ -47,7 +73,7 @@ Le rôle de chaque emplacement. L'état d'avancement n'est **pas** ici, il est d
 src/tech_radar_agent/
 ├── __init__.py      # main() : orchestre le pipeline
 ├── models.py        # Article : la donnée qui circule dans tout le pipeline
-├── collectors/      # une source = un module ; chacun produit des Article
+├── collectors/      # une source = une classe Collector ; registre type -> classe dans __init__.py
 └── storage/         # tout ce qui touche à SQLite
 config/interests.yaml  # profil d'intérêts + liste des sources
 data/                  # base SQLite locale ; le dossier est suivi via .gitkeep, les *.db* sont ignorés
@@ -66,8 +92,8 @@ Chaque soirée doit se terminer avec quelque chose qui tourne réellement.
 Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 articles bruts.
 1. ✅ Setup du projet avec uv, arborescence, `.gitignore`, README, premier push.
 2. ✅ **Le modèle `Article`** : la donnée qui circule dans tout le pipeline, avec la clé de dédup `normalized_url`.
-3. Le stockage SQLite (table `articles`, insertion sans doublons).
-4. Le premier collector : Hacker News (API Firebase officielle).
+3. ✅ Le stockage SQLite (table `articles`, insertion sans doublons).
+4. ✅ Le premier collector : Hacker News (API Firebase officielle).
 5. Les collectors RSS (feedparser) et GitHub.
 6. Le point d'entrée qui orchestre tout (une source en panne ne doit pas bloquer les autres) + le contenu de `interests.yaml`.
 
@@ -94,15 +120,17 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 _Dernière session : 2026-09-28._
 
-**Étape en cours : Soirée 1, étape 3 — stockage SQLite.** (Étape 2 terminée et mergée dans `dev`.)
+**Étape en cours : Soirée 1, étape 4 — collector Hacker News**, codé par Claude sur `feature/hackernews-collector`, testé sur l'API réelle (40 stories en ~1 s, doublons bien ignorés en base). Reste : relecture, commit, MR vers `dev`. Ensuite étape 5 (RSS + GitHub), sur le même modèle (`docs/architecture/collectors.md`, section « Adding a new source »).
+
+- Règles de sécurité ajoutées (section 🔒, `docs/security.md`, ADR 0007). À coder **au début de l'étape 5**, avant RSS et GitHub : taille de réponse bornée dans `http_client()`, suppression des caractères invisibles + troncature dans `html_to_text()`, validation du schéma d'URL (`http`/`https`). Le collector HN en bénéficiera aussi.
+- À prévoir à l'étape 6 : `httpx` logge chaque requête en INFO, passer son logger en WARNING dans `main()`.
+- Étape 3 (stockage) terminée et mergée (MR #4), ainsi que `docs/`.
 
 - `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
 - Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
 
 **Question reportée à la Soirée 2 (boucle de scoring) :**
 - `score` et `summary` seront stockés en base dans tous les cas (colonnes de la table `articles`, à créer dès l'étape 3). Reste à décider s'ils sont aussi des champs de la classe `Article` (`None` par défaut) ou seulement écrits par `storage/` via un `UPDATE`. Penchant initial pour les champs dans `Article`, puis hésitation. `Article` reste inchangé d'ici là.
-
-**Étape 3 codée (par Claude, à ma demande)**, branche `feature/sqlite-storage` : `storage/database.py` expose `connect(db_path)` (crée `data/` + la table) et `save_articles(conn, articles) -> int` (nombre réellement insérés). Vérifié : doublons ignorés, dates et `extra` bien relus. Reste : commit + MR vers `dev`, puis étape 4 (collector Hacker News).
 
 
 ## Décisions
@@ -116,13 +144,13 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Infos propres à une source (points HN, étoiles GitHub…) dans `extra: dict[str, Any]`, pour ne pas polluer le modèle commun.
 - Répartition du code : je code moi-même la partie « agent » (scoring, résumé, boucle, feedback). La plomberie (stockage SQLite…) peut être écrite par Claude quand je le demande ; je la relis.
 - Schéma SQLite : dates en `TEXT` ISO 8601 (lisible, triable), `extra` en `TEXT` JSON, `score INTEGER` (0-10) et `summary TEXT` à `NULL` tant que le LLM n'est pas passé. Insertion via `INSERT OR IGNORE` sur `normalized_url`. Base par défaut : `data/tech_radar.db` (chemin relatif au dossier de lancement).
+- Collectors génériques et pilotés par la config (l'agent pourra servir à autre chose que la veille tech) : classe abstraite `Collector` (`collect() -> list[Article]`), registre `COLLECTOR_TYPES`, `build_collector(dict)` passe les options au constructeur. `name` d'instance = `Article.source`. Source injoignable → exception ; item en échec → loggé et ignoré. Voir ADR 0006.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
 - GitHub n'a pas d'API « trending » officielle : la Search API (repos récents triés par étoiles) est plus robuste que du scraping HTML.
 - Tronquer le contenu des articles pour limiter le coût en tokens au scoring.
-- Paralléliser les appels à l'API Hacker News (une requête par item).
 - arXiv est une source très bruyante : prévoir une limite par flux.
 - Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
