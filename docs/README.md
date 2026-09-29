@@ -16,6 +16,7 @@ docs/
 │   └── README.md             # decision log
 └── development/
     ├── setup.md              # install, run, add dependencies
+    ├── testing.md            # pytest, fixtures, testing rules
     └── git-workflow.md       # branches and merge requests
 ```
 
@@ -41,4 +42,5 @@ The [decision log](decisions/README.md) records each architecture choice with it
 ## Development
 
 - [Setup](development/setup.md)
+- [Testing](development/testing.md)
 - [Git workflow](development/git-workflow.md)

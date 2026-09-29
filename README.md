@@ -67,6 +67,7 @@ tech_radar_agent/
 │   └── interests.yaml   # your interest profile and sources
 ├── data/                # local SQLite database (git-ignored)
 ├── docs/                # architecture, decision log, dev guides
+├── tests/               # pytest suite (uv run pytest)
 └── pyproject.toml
 ```
 

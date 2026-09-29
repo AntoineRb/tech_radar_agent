@@ -42,12 +42,16 @@ class Collector(ABC):
         return f"{type(self).__name__}(name={self.name!r})"
 
 
-def http_client() -> httpx.Client:
-    """Return an HTTP client with the settings shared by all collectors."""
+def http_client(transport: httpx.BaseTransport | None = None) -> httpx.Client:
+    """Return an HTTP client with the settings shared by all collectors.
+
+    `transport` replaces the network layer, e.g. with `httpx.MockTransport` in tests.
+    """
     return httpx.Client(
         timeout=10,
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
+        transport=transport,
     )
 
 

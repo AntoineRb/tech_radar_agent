@@ -32,12 +32,20 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Installer / synchroniser : `uv sync`.
 - Ajouter une dépendance : `uv add <pkg>` (ou `uv add --dev <pkg>` pour un outil de dev).
 - Toujours passer par `uv`. Jamais `pip`, jamais d'activation manuelle de venv.
-- Pas encore de tests ni de linter. Quand pytest sera ajouté, compléter ici (`uv run pytest`, un seul test : `uv run pytest tests/test_x.py::test_name`).
+- Tests : `uv run pytest` (tout, ~0,1 s), un fichier : `uv run pytest tests/test_models.py`, un test : `uv run pytest tests/test_models.py::TestArticle::test_defaults`, par nom : `uv run pytest -k xxe`. Guide : `docs/development/testing.md`. Pas de linter.
+
+## 🧪 Tests (règle)
+
+- **Chaque feature ajoutée ou modifiée arrive avec ses tests**, dans la même MR. Chaque bug corrigé arrive avec un test qui échoue sans le correctif.
+- `uv run pytest` doit passer avant chaque MR.
+- Jamais de réseau ni de vraie base dans les tests : fixture `fake_http` (faux serveur HTTP, `httpx.MockTransport`) et `tmp_path`. La fixture autouse `no_network` fait échouer toute vraie requête.
+- La sécurité se teste avec des entrées hostiles, pas seulement le cas nominal.
+- Quand c'est moi qui code (partie agent), Claude me guide aussi sur les tests (quoi tester, cas limites) sans les écrire à ma place.
 
 ## Stack
 
 - macOS, **Python 3.12** géré par **uv** (je veux me faire la main avec).
-- Dépendances actuelles : `httpx`, `feedparser`, `pyyaml`.
+- Dépendances actuelles : `httpx`, `feedparser`, `pyyaml`. Dev : `pytest`.
 - Prévu : SQLite (lib standard `sqlite3`) pour la mémoire, API LLM pour scoring et résumé, GitHub Actions (cron) pour l'automatisation, sortie par mail (SMTP) ou webhook Discord.
 
 ## 🔒 Sécurité (règles non négociables)
@@ -48,7 +56,7 @@ Détail et justification : `docs/security.md` et ADR 0007. Toute nouvelle dépen
 - Lib standard d'abord. Une dépendance tierce doit être justifiée.
 - Avant chaque `uv add`, Claude vérifie et me présente : dépôt officiel, mainteneurs, date de la dernière version, nombre de téléchargements, CVE connues, nom exact sur PyPI (attention au typosquatting). J'approuve avant l'ajout.
 - Uniquement depuis PyPI via `uv`, et `uv.lock` (hashes sha256) toujours commité.
-- Audit avant chaque MR qui touche aux dépendances : `uv export --format requirements-txt --no-emit-project > "$TMPDIR/req.txt" && uvx pip-audit --strict -r "$TMPDIR/req.txt"`.
+- Audit avant chaque MR qui touche aux dépendances : `uv export --format requirements-txt --no-emit-project --all-groups > "$TMPDIR/req.txt" && uvx pip-audit --strict -r "$TMPDIR/req.txt"` (`--all-groups` inclut les dépendances de dev).
 - GitHub Actions : uniquement des actions officielles ou très reconnues, épinglées par SHA de commit.
 
 **Services et URLs : vérifiés**
@@ -80,6 +88,7 @@ src/tech_radar_agent/
 config/interests.yaml  # profil d'intérêts + liste des sources
 data/                  # base SQLite locale ; le dossier est suivi via .gitkeep, les *.db* sont ignorés
 docs/                  # doc technique en anglais : architecture/, decisions/ (ADR), development/
+tests/                 # pytest, même arborescence que src/ ; conftest.py = fixtures partagées
 ```
 
 Tenir `docs/` à jour à chaque étape terminée : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
@@ -120,18 +129,24 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 ## 👉 Où on en est
 
-_Dernière session : 2026-09-28._
+_Dernière session : 2026-09-29._
 
-**🎉 Soirée 1 terminée (code) : étape 6 — point d'entrée**, branche `feature/entrypoint` (codée par Claude), commitée. Reste : MR vers `dev` et merge. README déjà mis à jour (Step 1 cochée).
+**Étape en cours : mise en place des tests (avant la Soirée 2)**, branche `feature/unit-test` (codée par Claude, pytest ajouté par moi). Reste : relecture, commit, MR vers `dev`.
 
+- 179 tests, ~0,1 s, sans réseau : `sanitize`, `models`, `storage`, `config` (dont validation du vrai `interests.yaml`), `main()` (faux collector enregistré dans `COLLECTOR_TYPES`), `collectors/` (base, registre, HN, RSS, GitHub).
+- Seul changement de code « pour les tests » : `http_client(transport=None)`.
+- 2 bugs trouvés et corrigés dans le collector RSS : une page HTML bien formée donnait 0 article en silence (maintenant `ValueError` « not an RSS or Atom feed ») ; une réponse vide plantait avec `AttributeError`.
+- Audit `pip-audit` avec pytest : aucune vulnérabilité.
+
+**Soirée 1 terminée et mergée (MR #7).** Rappel de l'étape 6 :
 - `main()` : charge la config (`config.py`), construit tous les collectors (erreur de config → arrêt avant tout appel réseau, code 2), les lance un par un (source en panne → loggée et ignorée), sauvegarde par source, résumé final. Code 1 si toutes les sources échouent. Logger `httpx` passé en WARNING.
 - `interests.yaml` : profil (`about`, `interests.high/medium/low`, `not_interested`) + 17 sources vérifiées le 2026-09-28 (HN, Lobsters, 2 recherches GitHub, 13 flux officiels : IA, Python, JS/TS, Apple, Nvidia, Microsoft/GitHub). Écartés : blog V8 (inactif depuis 2025), ancien Blogspot Python Insider (a déménagé).
 - Premier vrai run : 215 articles, 211 nouveaux en ~7 s ; second run : 0 nouveau. Pannes testées : source HS, DNS inconnu, toutes les sources HS, nom en double, type inconnu, option mal orthographiée, config vide ou absente, tag YAML malveillant (refusé, rien d'exécuté).
 
 **Prochaine étape : Soirée 2 — la boucle agentique (c'est moi qui code).** Premier point à trancher : le modèle LLM (local ou API, lequel), voir « Pistes ».
 
-- `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup). Vérifiée sur 5 cas (tracking `utm_*`/`fbclid`, casse du domaine, `/` final, `#fragment`, ordre des paramètres, `?v=` YouTube conservé) : à transformer en tests pytest plus tard.
-- Non géré volontairement : `www.` vs sans, `http` vs `https`. À revoir si de vrais doublons passent.
+- `models.py` contient la dataclass `Article` (servira de **modèle de style** pour les prochaines classes) et la fonction `normalize_url` + la propriété `normalized_url` (clé de dédup), couverte par `tests/test_models.py`.
+- Non géré volontairement : `www.` vs sans, `http` vs `https` (un test documente cette limite, à modifier si on la lève). À revoir si de vrais doublons passent.
 
 **Question reportée à la Soirée 2 (boucle de scoring) :**
 - `score` et `summary` seront stockés en base dans tous les cas (colonnes de la table `articles`, à créer dès l'étape 3). Reste à décider s'ils sont aussi des champs de la classe `Article` (`None` par défaut) ou seulement écrits par `storage/` via un `UPDATE`. Penchant initial pour les champs dans `Article`, puis hésitation. `Article` reste inchangé d'ici là.
@@ -152,12 +167,14 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Sécurité imposée par construction : `Article.__post_init__` nettoie `title`/`author`/`content` (NFKC, caractères cachés supprimés, troncature 300/100/3000) et rejette les URL non `http(s)` (`ValueError`, l'item est ignoré). Les collectors téléchargent uniquement via `fetch()`/`fetch_json()` (HTTPS, 5 Mo max), jamais `client.get`. `extra` n'est pas nettoyé : passer par `clean_text()` avant de le mettre dans un prompt.
 - GitHub : Search API officielle (repos créés récemment, triés par étoiles) plutôt que du scraping de la page trending. RSS : une entrée de config par flux, chacune avec son `name` et sa `limit` (utile pour arXiv, très bruyant).
 - Orchestration : config validée en entier avant tout appel réseau (fail fast) ; ensuite chaque source est isolée (`except Exception` uniquement à ce niveau) ; sauvegarde après chaque source. Sources lancées séquentiellement (~7 s pour 17, suffisant). Chemins relatifs au dossier de lancement.
+- Tests : pytest (dev uniquement), aucune autre dépendance de test. Réseau simulé par `httpx.MockTransport` (fixture `fake_http`, qui garde les vrais réglages de `http_client()` et les vrais contrôles de `fetch()`), vrai réseau bloqué par la fixture autouse `no_network`. `main()` testé avec un faux type de collector enregistré dans `COLLECTOR_TYPES`.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
 - Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
-- Tests pytest : aucun test automatisé pour l'instant. Tout a été vérifié par des scripts ponctuels. Candidats prioritaires : `normalize_url`, `sanitize.clean_text` / `is_safe_url` (caractères invisibles, `javascript:`…), collector RSS sur un flux piégé (XXE, `<script>`, lien manquant), `main()` sur les configs invalides (codes de sortie). Nécessite `uv add --dev pytest` (dépendance à valider selon les règles de sécurité).
+- Couverture de code (`pytest-cov`) et linter (`ruff`) : utiles plus tard, chaque ajout passe par la validation des dépendances.
+- CI : lancer `uv run pytest` sur chaque MR via GitHub Actions (à faire avec l'automatisation de la Soirée 3).
 - Premier run : 211 articles d'un coup (les flux renvoient leur historique). Les runs suivants n'apportent que les nouveautés. À surveiller à la Soirée 2 pour le coût du scoring du premier run (limiter aux articles récents ?).
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.
 
@@ -166,4 +183,5 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 À la fin de chaque session :
 1. Mettre à jour « Où on en est » (étape terminée, étape suivante, questions ouvertes).
 2. Ajouter les choix validés dans « Décisions » et retirer des « Pistes » ce qui a été tranché. Mettre à jour `docs/` en conséquence.
-3. Me rappeler de cocher la case correspondante dans la roadmap du README et de committer.
+3. Vérifier que `uv run pytest` passe et que les features du jour ont leurs tests.
+4. Me rappeler de cocher la case correspondante dans la roadmap du README et de committer.
