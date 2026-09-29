@@ -26,9 +26,11 @@ class RssCollector(Collector):
         with http_client() as client:
             feed = feedparser.parse(fetch(client, self.url))
 
-        # "bozo" flags a malformed feed. feedparser often recovers, so only fail if nothing came out.
-        if feed.bozo and not feed.entries:
-            raise ValueError(f"Unreadable feed {self.url}: {feed.bozo_exception}")
+        # "bozo" flags a malformed feed and an empty `version` a document that is not a feed at all
+        # (e.g. an HTML page). feedparser often recovers, so only fail if nothing came out.
+        if not feed.entries and (feed.bozo or not feed.get("version")):
+            reason = feed.get("bozo_exception") or "not an RSS or Atom feed"
+            raise ValueError(f"Unreadable feed {self.url}: {reason}")
 
         feed_title = feed.feed.get("title")
         articles = []
