@@ -86,7 +86,7 @@ Mapping to `Article`:
 Security notes:
 
 - `feedparser` disables external XML entities, so there is no XXE. It also removes `<script>` and other dangerous HTML before we convert the HTML to text.
-- A malformed feed (`bozo`) is accepted as long as some entries can be read. If nothing can be read, `collect()` raises.
+- A malformed feed (`bozo`) is accepted as long as some entries can be read. `collect()` raises if nothing can be read, or if the document is not a feed at all (for example an HTML page, detected by an empty `version`). A valid feed that has no entries returns an empty list.
 
 Tested on Lobsters (RSS 2.0), Simon Willison (Atom) and arXiv cs.AI.
 

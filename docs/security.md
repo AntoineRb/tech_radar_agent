@@ -25,7 +25,7 @@ The agent reads content written by strangers, sends it to an LLM, and puts the r
 - Audit before any merge request that changes dependencies:
 
   ```bash
-  uv export --format requirements-txt --no-emit-project > "$TMPDIR/req.txt"
+  uv export --format requirements-txt --no-emit-project --all-groups > "$TMPDIR/req.txt"
   uvx pip-audit --strict -r "$TMPDIR/req.txt"
   ```
 
@@ -39,8 +39,11 @@ The agent reads content written by strangers, sends it to an LLM, and puts the r
 | [`httpx`](https://github.com/encode/httpx) | Encode | HTTP client |
 | [`feedparser`](https://github.com/kurtmckee/feedparser) | Kurt McKee | RSS / Atom parsing |
 | [`pyyaml`](https://github.com/yaml/pyyaml) | The YAML project | Config file (always `yaml.safe_load`) |
+| [`pytest`](https://github.com/pytest-dev/pytest) (dev only) | pytest-dev | Tests. Not installed with the agent |
 
-Last audit on 2026-09-28: `pip-audit` found no known vulnerabilities.
+`--all-groups` includes the dev dependencies in the audit.
+
+Last audit on 2026-09-29, after adding pytest: `pip-audit` found no known vulnerabilities.
 
 ## 2. Services and URLs
 
@@ -82,6 +85,17 @@ Collected content is **data to evaluate, never instructions to follow**. There i
 
 - LLM output is also untrusted. Escape it when rendering the digest: no raw HTML, and only links built from validated URLs.
 - A heuristic detector (phrases like "ignore previous instructions") may flag suspicious articles in the logs. It is a signal, never the only defense.
+
+## Tests
+
+Security checks are covered by tests that use hostile input. See [testing.md](development/testing.md):
+
+- `test_sanitize.py`: hidden characters, ASCII smuggling with tag characters, look-alike characters, unsafe URL schemes.
+- `test_models.py::TestArticleSecurity`: `Article` rejects unsafe URLs and cleans every text field.
+- `collectors/test_base.py::TestFetch`: HTTPS only (even after a redirect), size limit.
+- `collectors/test_rss.py::TestSecurity`: XXE with both of feedparser's parsers, `<script>`, `javascript:` and `data:` links.
+- `test_config.py`: `yaml.safe_load` refuses to build Python objects.
+- `collectors/test_github.py::TestAuthentication`: the token comes only from the environment.
 
 ## Status
 
