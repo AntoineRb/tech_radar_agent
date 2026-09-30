@@ -24,6 +24,8 @@ tests/
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect, save_articles (dedup, types, NULL columns)
+├── llm/
+│   └── test_settings.py     # environment variables, localhost-only http, secret handling
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
     ├── test_registry.py     # build_collector, COLLECTOR_TYPES

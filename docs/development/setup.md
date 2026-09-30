@@ -5,7 +5,7 @@ The project uses Python 3.12, managed by [uv](https://docs.astral.sh/uv/). Alway
 | Task | Command |
 |---|---|
 | Install or sync dependencies | `uv sync` |
-| Run the agent | `uv run tech-radar-agent` |
+| Run the agent | `uv run --env-file .env tech-radar-agent` (see [environment variables](../configuration.md#environment-variables)) |
 | Add a dependency | `uv add <package>` |
 | Add a dev-only tool | `uv add --dev <package>` |
 | Run the tests | `uv run pytest` |

@@ -53,7 +53,8 @@ Last audit on 2026-09-29, after adding pytest: `pip-audit` found no known vulner
   - accept only `http` and `https` schemes;
   - never open them automatically;
   - if the agent ever fetches article pages, add SSRF protection (block private, loopback and link-local addresses).
-- Keep secrets (LLM API key, SMTP, webhook) in environment variables or GitHub secrets. Never put them in code, config files or logs.
+- **LLM endpoint**: HTTPS, with one exception: plain `http` is allowed only towards this machine (`localhost`, `127.0.0.1`, `::1`) for a local model such as Ollama. `is_allowed_llm_url()` in `llm/settings.py` enforces this, and a look-alike host (`localhost.evil.com`) or a LAN address is refused. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
+- Keep secrets (LLM API key, SMTP, webhook) in environment variables or GitHub secrets: a git-ignored `.env` locally, documented by `.env.example`, which never contains a real value. Never put secrets in code, config files or logs. `LlmSettings` hides the API key from `repr()`.
 - Load YAML with `yaml.safe_load`, never `yaml.load`.
 
 ## 3. Prompt injection
@@ -96,6 +97,7 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 - `collectors/test_rss.py::TestSecurity`: XXE with both of feedparser's parsers, `<script>`, `javascript:` and `data:` links.
 - `test_config.py`: `yaml.safe_load` refuses to build Python objects.
 - `collectors/test_github.py::TestAuthentication`: the token comes only from the environment.
+- `llm/test_settings.py`: http only towards localhost (look-alike hosts refused), API key hidden from `repr()`, no real key in `.env.example`.
 
 ## Status
 
@@ -106,6 +108,7 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 | HTTPS only, even after redirects, with a timeout | ✅ `collectors/base.py`: `fetch()` |
 | No XML external entities (XXE) in feeds | ✅ Disabled by `feedparser`, checked with a crafted feed |
 | GitHub token from the environment only | ✅ `collectors/github.py` (optional `GITHUB_TOKEN`) |
+| LLM endpoint: HTTPS, or http to localhost only; API key from the environment, hidden in logs | ✅ `llm/settings.py` |
 | Maximum response size (5 MB, counted after decompression) | ✅ `collectors/base.py`: `fetch()` |
 | Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
 | URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |
