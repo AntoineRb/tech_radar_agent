@@ -27,6 +27,7 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 
 ## Commandes
 
+- Variables d'environnement (LLM, secrets) : `cp .env.example .env` puis `uv run --env-file .env tech-radar-agent`. Détail : `docs/configuration.md`.
 - Lancer l'agent : `uv run tech-radar-agent` depuis la racine du repo (entry point `tech_radar_agent:main` dans `pyproject.toml`, défini dans `src/tech_radar_agent/__init__.py`). Lit `config/interests.yaml`, écrit dans `data/tech_radar.db`. Codes de sortie : 0 OK (même si certaines sources échouent), 1 toutes les sources en échec, 2 config invalide.
 - Voir la base : `sqlite3 data/tech_radar.db "SELECT source, count(*) FROM articles GROUP BY source"`.
 - Installer / synchroniser : `uv sync`.
@@ -63,7 +64,8 @@ Détail et justification : `docs/security.md` et ADR 0007. Toute nouvelle dépen
 - Uniquement des API officielles et documentées, et des flux RSS publiés par le site officiel de l'éditeur. Chaque source est documentée avec son lien de doc officiel dans `docs/architecture/collectors.md`.
 - HTTPS uniquement pour les sources, avec un délai d'attente (déjà dans `http_client()`) et une taille de réponse bornée.
 - Les URL collectées sont des données non fiables : on accepte seulement `http`/`https` (rejet de `javascript:`, `data:`, `file:`…). On ne les ouvre jamais automatiquement. Si ça change un jour, il faut une protection SSRF (bloquer les IP privées et locales).
-- Secrets (clé API LLM, SMTP, webhook) uniquement dans les variables d'environnement ou les secrets GitHub. Jamais dans le code, la config ou les logs.
+- Secrets (clé API LLM, SMTP, webhook) uniquement dans les variables d'environnement (`.env` ignoré par git en local) ou les secrets GitHub. Jamais dans le code, la config, `.env.example` ou les logs.
+- Endpoint LLM : HTTPS, **seule exception** : `http` vers `localhost`/`127.0.0.1`/`::1` pour un modèle local (Ollama). Contrôlé par `is_allowed_llm_url()`.
 - YAML : toujours `yaml.safe_load`, jamais `yaml.load`.
 
 **Injection de prompt : tout contenu collecté est une donnée, jamais une instruction**
@@ -83,6 +85,7 @@ src/tech_radar_agent/
 ├── __init__.py      # main() : orchestre le pipeline
 ├── models.py        # Article : la donnée qui circule dans tout le pipeline
 ├── sanitize.py      # nettoyage et validation des données collectées (non fiables)
+├── llm/             # settings.py (plomberie, Claude) ; client, scoring, résumé (moi)
 ├── collectors/      # une source = une classe Collector ; registre type -> classe dans __init__.py
 └── storage/         # tout ce qui touche à SQLite
 config/interests.yaml  # profil d'intérêts + liste des sources
@@ -129,9 +132,16 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 ## 👉 Où on en est
 
-_Dernière session : 2026-09-29._
+_Dernière session : 2026-09-30._
 
-**Étape en cours : mise en place des tests (avant la Soirée 2)**, branche `feature/unit-test` (codée par Claude, pytest ajouté par moi). Reste : relecture, commit, MR vers `dev`.
+**Étape en cours : Soirée 2 — boucle agentique (c'est moi qui code, Claude guide).**
+
+- ✅ Choix du LLM (question 1) : API au format OpenAI chat completions, appelée directement avec `httpx`, pour un modèle local (Ollama + Qwen) ou distant. Réglé par `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` (ADR 0008).
+- ✅ Plomberie codée par Claude, branche `feature/llm-settings` : `llm/settings.py` (`load_llm_settings()`, `LlmSettings` avec `is_local`, clé cachée du `repr`), exception http localhost, `.env.example`, 25 tests. Reste : commit + MR. `main()` ne lit pas encore ces réglages : ce sera à moi de les brancher avec la boucle.
+- Prochaines questions, une à la fois : (2) forme des prompts et du JSON renvoyé ; (3) `score`/`summary` dans `Article` ou seulement en base ; (4) seuil et gestion du premier run (211 articles) ; (5) erreurs API et rate limiting.
+- Pour tester en local : installer Ollama et récupérer un modèle Qwen (le tag exact sur la page du modèle Ollama).
+
+**Tests en place et mergés (MR #8)** :
 
 - 179 tests, ~0,1 s, sans réseau : `sanitize`, `models`, `storage`, `config` (dont validation du vrai `interests.yaml`), `main()` (faux collector enregistré dans `COLLECTOR_TYPES`), `collectors/` (base, registre, HN, RSS, GitHub).
 - Seul changement de code « pour les tests » : `http_client(transport=None)`.
@@ -167,12 +177,13 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Sécurité imposée par construction : `Article.__post_init__` nettoie `title`/`author`/`content` (NFKC, caractères cachés supprimés, troncature 300/100/3000) et rejette les URL non `http(s)` (`ValueError`, l'item est ignoré). Les collectors téléchargent uniquement via `fetch()`/`fetch_json()` (HTTPS, 5 Mo max), jamais `client.get`. `extra` n'est pas nettoyé : passer par `clean_text()` avant de le mettre dans un prompt.
 - GitHub : Search API officielle (repos créés récemment, triés par étoiles) plutôt que du scraping de la page trending. RSS : une entrée de config par flux, chacune avec son `name` et sa `limit` (utile pour arXiv, très bruyant).
 - Orchestration : config validée en entier avant tout appel réseau (fail fast) ; ensuite chaque source est isolée (`except Exception` uniquement à ce niveau) ; sauvegarde après chaque source. Sources lancées séquentiellement (~7 s pour 17, suffisant). Chemins relatifs au dossier de lancement.
+- LLM : un seul client au format OpenAI chat completions (`POST {LLM_BASE_URL}/chat/completions`) via `httpx`, sans SDK. Local (Ollama) ou distant selon `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`, pas de variable « mode » ni de `if local`. `.env` chargé par `uv run --env-file .env` (pas de python-dotenv). Voir ADR 0008.
+- Répartition Soirée 2 : Claude fait la plomberie (réglages, sécurité, `.env`), je code le client LLM, le scoring, le résumé et la boucle.
 - Tests : pytest (dev uniquement), aucune autre dépendance de test. Réseau simulé par `httpx.MockTransport` (fixture `fake_http`, qui garde les vrais réglages de `http_client()` et les vrais contrôles de `fetch()`), vrai réseau bloqué par la fixture autouse `no_network`. `main()` testé avec un faux type de collector enregistré dans `COLLECTOR_TYPES`.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
-- Modèle LLM : Qwen ou un autre (local ou via API ?). À trancher à la Soirée 2.
 - Couverture de code (`pytest-cov`) et linter (`ruff`) : utiles plus tard, chaque ajout passe par la validation des dépendances.
 - CI : lancer `uv run pytest` sur chaque MR via GitHub Actions (à faire avec l'automatisation de la Soirée 3).
 - Premier run : 211 articles d'un coup (les flux renvoient leur historique). Les runs suivants n'apportent que les nouveautés. À surveiller à la Soirée 2 pour le coût du scoring du premier run (limiter aux articles récents ?).
