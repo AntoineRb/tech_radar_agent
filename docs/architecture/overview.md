@@ -19,7 +19,8 @@ flowchart LR
 | Storage | ✅ Done | `storage/` |
 | Collection: Hacker News, RSS / Atom, GitHub | ✅ Done | `collectors/` |
 | Orchestration (`main()`) and config | ✅ Done | `__init__.py`, `config.py`, `config/interests.yaml` |
-| Scoring and summary | Planned | — |
+| LLM settings (local or remote) | ✅ Done | `llm/settings.py`, `.env.example` |
+| LLM client, scoring and summary | 🔜 Next | `llm/` |
 | Digest and delivery | Planned | — |
 | Feedback | Planned | — |
 
@@ -33,6 +34,8 @@ src/tech_radar_agent/
 ├── config.py        # loads and checks config/interests.yaml
 ├── models.py        # Article: the data that flows through the pipeline
 ├── sanitize.py      # cleaning and validation of untrusted collected data
+├── llm/
+│   └── settings.py  # LLM location (LLM_BASE_URL, LLM_MODEL, LLM_API_KEY) from the environment
 ├── collectors/
 │   ├── __init__.py  # registry: config type -> collector class, build_collector()
 │   ├── base.py      # Collector base class, shared HTTP client and helpers

@@ -30,6 +30,6 @@ Do **not** use `git flow feature finish`, because it merges locally and skips th
 | #5 | `feature/hackernews-collector` | Collector base class, Hacker News collector, security rules |
 | #6 | `feature/rss-github-collectors` | Parsing-time security, RSS and GitHub collectors, interest profile |
 | #7 | `feature/entrypoint` | `main()` orchestration and source list |
-| — | `feature/unit-test` | pytest setup and tests for everything built so far (in progress) |
+| #8 | `feature/unit-test` | pytest setup and tests for everything built so far |
 
 Before opening a merge request, run `uv run pytest`: every test must pass.
