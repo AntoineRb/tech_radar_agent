@@ -25,7 +25,9 @@ tests/
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect, save_articles (dedup, types, NULL columns)
 ├── llm/
-│   └── test_settings.py     # environment variables, localhost-only http, secret handling
+│   ├── test_settings.py     # environment variables, localhost-only http, secret handling
+│   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
+│   └── test_cli.py          # python -m tech_radar_agent.llm (setup check command)
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
     ├── test_registry.py     # build_collector, COLLECTOR_TYPES
@@ -57,11 +59,17 @@ def test_something(fake_http):
 
 A route without a query string also matches requests with one. Unknown URLs get a 404. The collectors still use the real `http_client()` settings (User-Agent, redirects) and the real `fetch()` checks. Only the network layer is replaced, through `httpx.MockTransport`.
 
+### Testing the LLM client
+
+`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed.
+
 ### Testing `main()`
 
 `test_main.py` registers a `FakeCollector` (`type: fake`) in `COLLECTOR_TYPES`, then runs `main()` in an empty temporary folder. This tests the orchestration without any HTTP. `caplog.set_level(logging.INFO)` is needed there, because pytest's own log handlers make `main()`'s `basicConfig()` a no-op.
 
 ## Rules
+
+- Test file names must be unique across folders (there is no `__init__.py` in `tests/`): `tests/llm/test_cli.py`, not a second `test_main.py`.
 
 - **Every feature ships with its tests.** Adding or changing a feature means adding or updating the matching tests in the same merge request.
 - **Every bug fix ships with a test** that fails without the fix.

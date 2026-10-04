@@ -86,9 +86,22 @@ In CI (GitHub Actions), they come from the repository secrets.
 | `LLM_BASE_URL` | yes | Base URL of a server that speaks the OpenAI chat completions format. HTTPS, or `http://localhost…` for a local model |
 | `LLM_MODEL` | yes | Model name as the server knows it, e.g. `qwen3:4b` in Ollama |
 | `LLM_API_KEY` | remote APIs | Secret key. Leave it empty for a local model |
+| `LLM_REASONING_EFFORT` | no | Sent as `reasoning_effort` in every request. `none` turns off a model's thinking phase (qwen3.6 in Ollama: ~0.3 s instead of ~18 s per call). Leave it empty if the server rejects the field |
+| `LLM_REQUEST_TIMEOUT` | no | Seconds for one LLM call, default `30`. A local model's first call loads it into memory (~20 s) |
 | `GITHUB_TOKEN` | no | Higher GitHub search rate limit. Set automatically in GitHub Actions |
 
-They are read by `llm.load_llm_settings()`, which raises `ValueError` if a required variable is missing or if the URL is not allowed. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
+They are read by `llm.load_llm_settings()`, which raises `ValueError` if a required variable is missing, if the URL is not allowed, or if the timeout is not a positive number. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
+
+### Checking the LLM setup
+
+Send one message to the configured LLM and print the answer:
+
+```bash
+uv run --env-file .env python -m tech_radar_agent.llm                       # default prompt: expects "pong"
+uv run --env-file .env python -m tech_radar_agent.llm --debug "Your prompt"  # also logs duration and tokens
+```
+
+Exit codes: `0` answer printed, `1` the LLM failed (server down, bad key…), `2` invalid settings. The API key is never printed.
 
 ### Local model with Ollama
 
