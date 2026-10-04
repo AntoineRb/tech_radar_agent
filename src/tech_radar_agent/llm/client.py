@@ -42,9 +42,34 @@ _THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.DOTALL)
 class LlmError(Exception):
     """The LLM could not give a usable answer.
 
-    One single error type for every failure (network, timeout, HTTP status, unexpected response),
-    so callers only need `except LlmError`.
+    Every failure is an LlmError, so `except LlmError` catches them all. The class tells callers how
+    to react:
+    - LlmError itself: a problem with this one call (malformed, empty or cut-off answer...). Moving on
+      to the next request is fine.
+    - LlmTemporaryError: the server is overloaded or briefly unreachable. Wait, then retry.
+    - LlmFatalError: the setup is wrong (bad key, unknown model, server down). Every further call
+      would fail the same way: stop.
     """
+
+
+class LlmTemporaryError(LlmError):
+    """Rate limited, server busy or restarting, timeout, dropped connection: retrying later may work."""
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after  # Seconds the server asked us to wait (Retry-After), if any.
+
+
+class LlmFatalError(LlmError):
+    """Bad key, unknown model, rejected request field, server down: retrying cannot help."""
+
+
+# HTTP statuses worth retrying: rate limited (429) and server-side trouble (500, 502, 503, 504).
+_TEMPORARY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+# HTTP statuses that mean the setup is wrong: bad request field (400), bad or missing key (401, 403),
+# unknown model or wrong base URL (404).
+_FATAL_STATUSES = frozenset({400, 401, 403, 404})
 
 
 class LlmClient:
@@ -101,18 +126,18 @@ class LlmClient:
             # Raises HTTPStatusError for any non-2xx status: 401 (bad key), 429 (rate limited),
             # 500 (server error), and also 3xx (redirects, since they are not followed).
             response.raise_for_status()
-        # Order matters: TimeoutException is a subclass of RequestError, so it must come first.
+        # Order matters: TimeoutException and ConnectError are subclasses of RequestError, so they come first.
+        # `from exc` keeps the original error as __cause__, visible in the traceback.
         except httpx.TimeoutException as exc:
-            # `from exc` keeps the original error as __cause__, visible in the traceback.
-            raise LlmError(f"LLM request timed out ({type(exc).__name__})") from exc
+            raise LlmTemporaryError(f"LLM request timed out ({type(exc).__name__})") from exc
         except httpx.HTTPStatusError as exc:
-            # The start of the body often holds the server's explanation (e.g. "reasoning_effort not supported").
-            # It comes from an external server and ends up in logs: cleaned and truncated.
-            detail = clean_text(exc.response.text, 200) or "no details"
-            raise LlmError(f"LLM server returned HTTP {exc.response.status_code}: {detail}") from exc
+            raise _status_error(exc.response) from exc
+        except httpx.ConnectError as exc:
+            # Connection refused or unknown host: the server is not running, or LLM_BASE_URL is wrong.
+            raise LlmFatalError(f"Could not reach LLM server ({type(exc).__name__})") from exc
         except httpx.RequestError as exc:
-            # Every other transport error: server down, unknown host, connection reset...
-            raise LlmError(f"Could not reach LLM server ({type(exc).__name__})") from exc
+            # Connected, then lost: reset, protocol error while reading...
+            raise LlmTemporaryError(f"Connection to LLM server lost ({type(exc).__name__})") from exc
 
         # --- 2. Decode the JSON ---
         try:
@@ -206,3 +231,31 @@ class LlmClient:
         # Close in every case. Returning None (not True) lets the exception propagate:
         # clean up without hiding it.
         self.close()
+
+
+def _status_error(response: httpx.Response) -> LlmError:
+    """The LlmError matching a non-2xx answer: temporary, fatal, or about this call only."""
+    status = response.status_code
+    # The start of the body often holds the server's explanation (e.g. "reasoning_effort not supported").
+    # It comes from an external server and ends up in logs: cleaned and truncated.
+    detail = clean_text(response.text, 200) or "no details"
+    message = f"LLM server returned HTTP {status}: {detail}"
+
+    if status in _TEMPORARY_STATUSES:
+        return LlmTemporaryError(message, retry_after=_retry_after(response))
+    if status in _FATAL_STATUSES or 300 <= status < 400:
+        # A redirect is never followed (see __init__): LLM_BASE_URL points to the wrong place.
+        return LlmFatalError(message)
+    return LlmError(message)  # Other statuses (e.g. 413 request too large) concern this call only.
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    """The wait in seconds asked by the server's Retry-After header, if it gives one as a number.
+
+    The HTTP-date form of the header is ignored: callers then use their own delay.
+    """
+    try:
+        seconds = float(response.headers.get("Retry-After", ""))
+    except ValueError:
+        return None
+    return seconds if 0 <= seconds < float("inf") else None

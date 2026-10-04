@@ -120,4 +120,16 @@ The crafted cases are: an injection inside a crypto article (0), a research pape
 ## Not done yet
 
 - The scoring is not wired into `main()` yet, and scores are not stored. That comes with the agent loop (threshold, summary, storing `score`, `reason` and `interests`).
-- `ScoreValidationError` is the only error category distinguished so far. Telling fatal errors (bad key, server down) from temporary ones (rate limit) is part of the loop's error handling.
+- The agent loop (scoring recent articles, summaries above the threshold, storing results) is being built.
+
+## Errors
+
+Every failure is an `LlmError`. Its class tells the caller how to react:
+
+| Class | Raised for | Expected reaction |
+|---|---|---|
+| `LlmError` itself, `ScoreValidationError` | invalid, empty or cut-off answer, tool call, other statuses (413…) | skip this article, go on |
+| `LlmTemporaryError` | 429, 500, 502, 503, 504, timeouts, connection lost while reading. Has `retry_after` (seconds) when the server sent a numeric `Retry-After` | wait, retry, then stop if it persists |
+| `LlmFatalError` | 400, 401, 403, 404 (e.g. unknown model), any redirect, connection refused or unknown host | stop: every further call would fail the same way |
+
+Checked against Ollama: an unknown model gives `LlmFatalError` (HTTP 404, with Ollama's explanation), and a stopped server gives `LlmFatalError` (connection refused).

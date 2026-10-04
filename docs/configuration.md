@@ -99,8 +99,11 @@ In CI (GitHub Actions), they come from the repository secrets.
 | `LLM_REASONING_EFFORT` | no | Sent as `reasoning_effort` in every request. `none` turns off a model's thinking phase (qwen3.6 in Ollama: ~0.3 s instead of ~18 s per call). Leave it empty if the server rejects the field |
 | `LLM_REQUEST_TIMEOUT` | no | Seconds for one LLM call, default `30`. A local model's first call loads it into memory (~20 s) |
 | `GITHUB_TOKEN` | no | Higher GitHub search rate limit. Set automatically in GitHub Actions |
+| `AGENT_MAX_ARTICLE_AGE_DAYS` | no | Only articles published (or collected, when there is no date) in the last N days are scored. Default `3`, from 1 to 365 |
+| `AGENT_MAX_ARTICLES_PER_RUN` | no | At most this many articles are scored per run, newest first. Default `100`. A safety cap on time and cost |
+| `AGENT_SUMMARY_THRESHOLD` | no | Articles scored at least this (0-10) get a summary. Default `8`. Scores depend on the model: retune it when changing `LLM_MODEL` |
 
-They are read by `llm.load_llm_settings()`, which raises `ValueError` if a required variable is missing, if the URL is not allowed, or if the timeout is not a positive number. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
+The `LLM_*` variables are read by `llm.load_llm_settings()` and the `AGENT_*` ones by `agent.settings.load_agent_settings()`. Both raise `ValueError` if a required variable is missing, if the URL is not allowed, or if a number is invalid or out of range. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
 
 ### Checking the LLM setup
 

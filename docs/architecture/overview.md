@@ -37,7 +37,8 @@ src/tech_radar_agent/
 ├── models.py        # Article: the data that flows through the pipeline
 ├── sanitize.py      # cleaning and validation of untrusted collected data
 ├── agent/
-│   └── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
+│   ├── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
+│   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
 ├── llm/
 │   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment
 │   ├── client.py    # LlmClient: OpenAI-compatible chat completions over httpx
