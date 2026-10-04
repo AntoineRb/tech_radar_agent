@@ -30,6 +30,16 @@ def test_options_are_added_to_the_body():
 
 
 @TODO
+def test_reasoning_effort_is_sent_only_when_set():
+    """settings.reasoning_effort="none" -> "reasoning_effort": "none" in the body. None -> no such key at all."""
+
+
+@TODO
+def test_timeout_comes_from_the_settings():
+    """The client uses settings.request_timeout (hint: an httpx.Client exposes its `.timeout`)."""
+
+
+@TODO
 def test_authorization_header_only_with_an_api_key():
     """Key set -> "Bearer <key>". No key (local model) -> no Authorization header at all."""
 
