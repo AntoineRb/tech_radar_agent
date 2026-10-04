@@ -1,19 +1,20 @@
-"""Generic client for any server speaking the OpenAI chat completions format (ADR 0008).
+"""Client générique pour tout serveur qui parle le format OpenAI chat completions (ADR 0008).
 
-This module knows HTTP and the response format. It knows NOTHING about scoring, summaries or
-your interest profile: those live in another module that receives an LlmClient.
+Ce module connaît HTTP et le format de réponse. Il ne sait RIEN du scoring, des résumés ni de
+ton profil d'intérêts : tout ça vit dans un autre module, qui reçoit un LlmClient.
 
-Request (what the server expects):
+Requête (ce que le serveur attend) :
     POST {base_url}/chat/completions
-    Authorization: Bearer <api_key>          <- only if there is a key
-    JSON body: {"model": "...", "messages": [...], ...optional fields}
+    Authorization: Bearer <api_key>          <- seulement s'il y a une clé
+    Corps JSON : {"model": "...", "messages": [...], ...champs optionnels}
 
-Response (what you get back, trimmed):
-    {"choices": [{"message": {"role": "assistant", "content": "the answer"}}],
+Réponse (ce qu'on reçoit, simplifiée) :
+    {"choices": [{"message": {"role": "assistant", "content": "la réponse"}}],
      "usage": {"prompt_tokens": 48, "completion_tokens": 2, ...}}
 
-SKELETON: replace every `raise NotImplementedError` and TODO. Delete these guide comments as you go
-(keep the ones that explain *why*).
+SQUELETTE : remplace chaque `raise NotImplementedError` et chaque TODO. Supprime ces commentaires
+guides au fur et à mesure (garde ceux qui expliquent *pourquoi*).
+⚠️ Commentaires temporairement en français : à repasser en anglais à la fin de l'exercice.
 """
 
 import logging
@@ -25,97 +26,92 @@ from tech_radar_agent.llm.settings import LlmSettings
 
 logger = logging.getLogger(__name__)
 
-# A message of the conversation: {"role": "system" | "user" | "assistant", "content": "..."}.
+# Un message de la conversation : {"role": "system" | "user" | "assistant", "content": "..."}.
 Message = dict[str, str]
 
-# TODO: choose the timeout (seconds) for one LLM call. Numbers measured on your Mac with qwen3.6:
-#   - warm model, reasoning off: ~0.3 s
-#   - warm model, reasoning on: ~18 s
-#   - first call (model loading into memory): ~20 s
-#   - collectors use 10 s: is that enough here?
-REQUEST_TIMEOUT = ...
+# Le délai d'attente et reasoning_effort ne sont PAS des constantes ici : ils viennent de LlmSettings
+# (variables LLM_REQUEST_TIMEOUT et LLM_REASONING_EFFORT, voir .env.example), pour s'adapter à l'environnement.
+#   settings.request_timeout : float, 30 par défaut
+#   settings.reasoning_effort : str ou None (None = ne pas envoyer le champ)
 
 
 class LlmError(Exception):
-    """The LLM could not give a usable answer.
+    """Le LLM n'a pas pu fournir de réponse exploitable.
 
-    One single error type for every failure (network, timeout, HTTP status, unexpected response),
-    so callers only need `except LlmError`.
+    Un seul type d'erreur pour tous les échecs (réseau, délai dépassé, code HTTP, réponse inattendue),
+    pour que le code appelant n'ait qu'à écrire `except LlmError`.
     """
 
 
 class LlmClient:
-    """Sends conversations to the LLM described by LlmSettings. One instance per run.
+    """Envoie des conversations au LLM décrit par LlmSettings. Une seule instance par lancement.
 
-    Usage (what the rest of the code will write):
+    Utilisation (ce que le reste du code écrira) :
         with LlmClient(load_llm_settings()) as llm:
             text = llm.chat([{"role": "user", "content": "Hello"}])
     """
 
     def __init__(self, settings: LlmSettings, transport: httpx.BaseTransport | None = None) -> None:
         """
-        Input:
-            settings: base_url, model, api_key (already validated: https, or http on localhost only).
-            transport: None in real use. In tests, an httpx.MockTransport (like `fake_http` does).
-        Output: nothing, but the instance is ready to send requests.
-
-        TODO:
-        - Keep what `chat()` will need later (attributes).
-        - Create ONE httpx.Client here, reused by every call (not one per call: why?).
-            * `httpx.Client` accepts `base_url=`: then requests only need the path "/chat/completions".
-            * Headers: the Authorization header only when there is an api_key.
-            * Timeout: REQUEST_TIMEOUT.
-            * Pass `transport` through (like `http_client()` in collectors/base.py).
-        - Security: never log the api_key, never put it anywhere else than the header.
+        Entrée :
+            settings : base_url, model, api_key (déjà validés : https, ou http vers localhost uniquement),
+                reasoning_effort (str ou None), request_timeout (float, en secondes).
+            transport : None en usage réel. Dans les tests, un httpx.MockTransport (comme le fait `fake_http`).
+        Sortie : rien, mais l'instance est prête à envoyer des requêtes.
         """
-        raise NotImplementedError
+        # Ce dont chat() aura besoin à chaque appel.
+        self._model = settings.model
+        self._reasoning_effort = settings.reasoning_effort
+
+        # Un seul client HTTP pour tout le lancement : il garde la connexion ouverte entre deux appels.
+        # La clé API n'existe que dans cet en-tête : jamais dans un attribut ni dans un log.
+        self._http_client = httpx.Client(
+            base_url=settings.base_url,
+            headers={"Authorization": f"Bearer {settings.api_key}"} if settings.api_key else {},
+            timeout=settings.request_timeout,
+            transport=transport,  # None = vrai réseau ; un faux serveur dans les tests.
+            follow_redirects=False,  # Never follow: a redirect could send prompts elsewhere.
+        )
 
     def chat(self, messages: list[Message], **options: Any) -> str:
-        """Send a conversation and return the assistant's answer.
+        """Envoie une conversation et renvoie la réponse de l'assistant.
 
-        Input:
-            messages: the conversation, usually one "system" message + one "user" message.
-            options: optional fields added to the request body, chosen by the caller per task.
-                Examples: temperature=0, max_tokens=200, reasoning_effort="none".
-        Output:
-            The answer text (str), never empty.
-        Raises:
-            LlmError for any failure.
+        Entrée :
+            messages : la conversation, en général un message "system" + un message "user".
+            options : champs optionnels ajoutés au corps de la requête, choisis par l'appelant selon la tâche.
+                Exemples : temperature=0, max_tokens=200.
+        Sortie :
+            Le texte de la réponse (str), jamais vide.
+        Lève :
+            LlmError pour tout échec.
 
-        TODO, step by step:
-        1. Build the JSON body: model + messages + options.
-           Question: what should happen if `options` also contains "model" or "messages"?
-        2. Send the POST request.
-           Question: which httpx exceptions can happen (connection, timeout, bad status)?
-           Wrap them into LlmError and keep the original cause (look up `raise ... from ...`).
-           Remember `response.raise_for_status()`.
-        3. Read the text at choices[0].message.content.
-           Any missing step (no "choices", empty list, no "message", content None, invalid JSON)
-           -> LlmError. Security rule: reject, never guess.
-        4. Blank answer ("", "   ") -> LlmError.
-        5. Optional but useful: logger.debug() the duration and the token usage.
-           Never log the key. Avoid logging whole prompts at INFO level (they contain your profile).
+        TODO, étape par étape :
+        1. Construire le corps JSON : model + messages + options,
+           + "reasoning_effort" seulement si settings.reasoning_effort n'est pas None.
+           Questions : que doit-il se passer si `options` contient aussi "model" ou "messages" ?
+           Et si l'appelant passe son propre reasoning_effort dans `options`, qui gagne ?
+        2. Envoyer la requête POST.
+           Question : quelles exceptions httpx peuvent survenir (connexion, délai dépassé, mauvais code HTTP) ?
+           Les transformer en LlmError en gardant la cause d'origine (cherche `raise ... from ...`).
+           Pense à `response.raise_for_status()`.
+        3. Lire le texte dans choices[0].message.content.
+           Le moindre élément manquant (pas de "choices", liste vide, pas de "message", content à None,
+           JSON invalide) -> LlmError. Règle de sécurité : on rejette, on ne devine jamais.
+        4. Réponse vide ("", "   ") -> LlmError.
+        5. Optionnel mais utile : logger.debug() la durée et les tokens consommés.
+           Ne jamais logger la clé. Éviter de logger les prompts entiers au niveau INFO (ils contiennent ton profil).
         """
         raise NotImplementedError
 
     def close(self) -> None:
-        """Release the connection. TODO: close the httpx.Client."""
+        """Libère la connexion. TODO : fermer le httpx.Client."""
         raise NotImplementedError
 
     def __enter__(self) -> "LlmClient":
-        """Called by `with LlmClient(...) as llm:`. TODO: what should `llm` be?"""
+        """Appelé par `with LlmClient(...) as llm:`. TODO : que doit valoir `llm` ?"""
         raise NotImplementedError
 
     def __exit__(self, *exc_info: object) -> None:
-        """Called when leaving the `with` block, even after an exception. TODO: clean up."""
+        """Appelé à la sortie du bloc `with`, même après une exception. TODO : faire le ménage."""
         raise NotImplementedError
 
-
-# OPEN QUESTION (decide before coding chat()):
-# `reasoning_effort="none"` makes qwen3.6 60x faster, but a remote provider may reject that field.
-# Where should this setting come from?
-#   (A) the caller passes it in `options` for each task (the scorer decides);
-#   (B) a new optional environment variable, e.g. LLM_REASONING_EFFORT, stored in LlmSettings
-#       and added to every request by the client (that part is plumbing: ask Claude);
-#   (C) something else?
-# Think about: who knows whether the server supports it? The code, or where it is deployed?
