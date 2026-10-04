@@ -20,7 +20,9 @@ flowchart LR
 | Collection: Hacker News, RSS / Atom, GitHub | ✅ Done | `collectors/` |
 | Orchestration (`main()`) and config | ✅ Done | `__init__.py`, `config.py`, `config/interests.yaml` |
 | LLM settings (local or remote) | ✅ Done | `llm/settings.py`, `.env.example` |
-| LLM client, scoring and summary | 🔜 Next | `llm/` |
+| LLM client (no tools, strict response checks) | ✅ Done | `llm/client.py` |
+| Scoring: prompts and answer validation | ✅ Done, not wired into `main()` yet | `agent/scoring.py` ([details](scoring.md)) |
+| Agent loop: threshold, summary, storing results | 🔜 Next | `agent/` |
 | Digest and delivery | Planned | — |
 | Feedback | Planned | — |
 
@@ -34,8 +36,12 @@ src/tech_radar_agent/
 ├── config.py        # loads and checks config/interests.yaml
 ├── models.py        # Article: the data that flows through the pipeline
 ├── sanitize.py      # cleaning and validation of untrusted collected data
+├── agent/
+│   └── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
 ├── llm/
-│   └── settings.py  # LLM location (LLM_BASE_URL, LLM_MODEL, LLM_API_KEY) from the environment
+│   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment
+│   ├── client.py    # LlmClient: OpenAI-compatible chat completions over httpx
+│   └── __main__.py  # python -m tech_radar_agent.llm: checks the LLM setup
 ├── collectors/
 │   ├── __init__.py  # registry: config type -> collector class, build_collector()
 │   ├── base.py      # Collector base class, shared HTTP client and helpers
@@ -73,3 +79,5 @@ First real run (17 sources): 215 articles collected, 211 new, in about 7 seconds
 - Collectors only know about `Article`. They never touch the database.
 - `storage/` is the only module that talks to SQLite.
 - `main()` wires everything together. A failing source must not stop the others.
+- `llm/` knows how to talk to an LLM; `agent/` knows how to judge articles. `agent/` depends on `llm/`, never the reverse.
+- Article data only ever reaches the LLM inside the delimited user message, never in the system message.

@@ -78,9 +78,14 @@ Collected content is **data to evaluate, never instructions to follow**. There i
 
 ### At prompting (scoring and summary)
 
-- Put the article in a clearly delimited block (for example `<article>…</article>`). Remove any delimiter that appears inside the content.
-- The system prompt says that the block is untrusted data and that any instruction inside it must be ignored.
-- Ask for structured output (JSON) and validate it: `score` must be an integer from 0 to 10, and `summary` has a maximum length. If the output is invalid, reject the article. Never guess or fix the output.
+Implemented for scoring in `agent/scoring.py` (see [scoring](architecture/scoring.md)):
+
+- The article goes **only** into the user message, inside an `<article>…</article>` block. The system message holds only trusted instructions and the profile.
+- Every value is cleaned again before it goes into the block, including `extra`, whose types are checked: one line per value (no fake `key: value` lines), bounded lengths, and every `<article>` / `</article>` tag removed whatever its case or spacing, until stable.
+- The system prompt says that the block is untrusted data, that instructions inside it must be ignored even if they claim to come from the system, and that an article *about* prompt injection is normal content.
+- The answer is strict JSON, validated by `parse_score`: exactly three fields, no duplicate keys, an integer score from 0 to 10 (`true`, `7.0` and `"7"` refused), a cleaned `reason`, and only interest ids from the profile. Any problem rejects the article. The output is never guessed or repaired.
+- Measured with qwen3.6: an article combining an injection attempt and a crypto pitch was scored 0.
+- The summary will follow the same rules.
 - The scoring and summary LLM has **no tools and no side effects**. It only returns text. This is enforced by `LlmClient`, not left to convention:
   - `chat()` refuses `tools`, `tool_choice`, `parallel_tool_calls`, `functions` and `function_call` options (`TypeError`, nothing is sent);
   - an answer containing a tool call is rejected (`LlmError`);
@@ -102,6 +107,7 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 - `collectors/test_rss.py::TestSecurity`: XXE with both of feedparser's parsers, `<script>`, `javascript:` and `data:` links.
 - `test_config.py`: `yaml.safe_load` refuses to build Python objects.
 - `collectors/test_github.py::TestAuthentication`: the token comes only from the environment.
+- `agent/test_scoring.py`: hostile LLM answers (duplicate keys, `true` as a score, invented ids, extra fields whose names are never echoed), delimiter escapes (`</ARTICLE >`, `<arti<article>cle>`), fake lines hidden in tags, hostile `extra`, and injection text that must never reach the system message.
 - `llm/test_client.py`: tools can never be offered, tool-call answers are refused, the key never reaches logs.
 - `llm/test_settings.py`: http only towards localhost (look-alike hosts refused), API key hidden from `repr()`, no real key in `.env.example`.
 
@@ -120,5 +126,6 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 | Maximum response size (5 MB, counted after decompression) | ✅ `collectors/base.py`: `fetch()` |
 | Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
 | URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |
-| Prompt delimiting, output validation, no tools | 🔜 Scoring loop |
+| Prompt delimiting, delimiter neutralization, strict output validation, no tools | ✅ Scoring (`agent/scoring.py`, `llm/client.py`) |
+| Same rules for the summary | 🔜 Summary |
 | Output escaping in the digest | 🔜 Delivery |
