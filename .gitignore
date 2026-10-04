@@ -36,3 +36,6 @@ htmlcov/
 
 # --- macOS ---
 .DS_Store
+
+# --- personal document ---
+PREPARATION_ENTRETIEN.md
