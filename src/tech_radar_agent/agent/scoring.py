@@ -47,6 +47,8 @@ MAX_TAGS = 5  # Nombre maximal de tags/topics envoyés.
 MAX_TAG_CHARS = 40  # Longueur maximale d'un tag.
 MAX_REASON_CHARS = 300  # Longueur maximale de `reason` gardée après validation.
 MIN_SCORE, MAX_SCORE = 0, 10
+MAX_FIELD_CHARS = 253   # source and domain: 253 is the maximum length of a DNS host name
+MAX_TITLE_CHARS = 300   # real titles: HN ≤ 80, GitHub "owner/repo" ≤ 140, long arXiv titles ~250
 
 TEMPERATURE = 0  # Mesuré : notes identiques d'un passage à l'autre.
 MAX_TOKENS = 200  # Réponses mesurées à ~57 tokens : de la marge pour une `reason` en français.
@@ -61,6 +63,8 @@ _REQUIRED_FIELDS = frozenset({"score", "reason", "interests"})
 # JSON entouré de balises Markdown : ```json {…} ``` ou ``` {…} ```, sur une ou plusieurs lignes.
 # Compilée une seule fois, au chargement du module (pas à chaque appel).
 _CODE_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", flags=re.DOTALL | re.IGNORECASE)
+
+_ARTICLE_TAG_RE = re.compile(r"<\s*/?\s*article\b[^>]*>", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -186,7 +190,6 @@ def parse_score(text: str, allowed_ids: frozenset[str]) -> Score:
 # Étape 2 : le message user (l'article, donnée NON FIABLE)
 # ---------------------------------------------------------------------------------------------
 
-
 def build_article_message(article: Article) -> str:
     """Construit le message user : l'article seul, entre délimiteurs, en lignes `clé: valeur`.
 
@@ -219,32 +222,98 @@ def build_article_message(article: Article) -> str:
     3. Omettre les lignes vides (pas de tags, pas de contenu…).
     4. Entourer le tout de ARTICLE_OPEN / ARTICLE_CLOSE, une ligne chacun.
     """
-    raise NotImplementedError
+    # Tronqué AVANT le nettoyage : on veut d'abord une coupure propre en fin de mot.
+    content = _truncate_at_word(article.content, SCORING_CONTENT_CHARS) if article.content else None
+    tags = _collect_tags(article.extra)  # Déjà nettoyés un par un.
 
+    # Une LISTE de paires, pas un set : l'ordre des lignes doit être fixe d'un article à l'autre.
+    fields = [
+        ("source", _clean_field(article.source, MAX_FIELD_CHARS)),
+        ("domain", _clean_field(_domain(article.url), MAX_FIELD_CHARS)),
+        ("title", _clean_field(article.title, MAX_TITLE_CHARS)),
+        ("tags", ", ".join(tags) or None),
+        ("content", _clean_field(content, SCORING_CONTENT_CHARS)),
+    ]
+
+    lines = [ARTICLE_OPEN]
+    lines.extend(f"{key}: {value}" for key, value in fields if value)  # Lignes vides omises.
+    lines.append(ARTICLE_CLOSE)
+    return "\n".join(lines)
 
 def _clean_field(value: str | None, max_length: int) -> str | None:
     """Nettoie une valeur externe avant de l'insérer dans le bloc <article>.
-
-    TODO :
-    1. clean_text(value, max_length) : retire les caractères invisibles, met tout sur une ligne, tronque.
-       (Une seule ligne : un retour à la ligne dans une valeur pourrait imiter une fausse ligne `clé: valeur`.)
-    2. Neutraliser les délimiteurs : un attaquant pourrait écrire "</article>" dans son contenu pour « sortir »
-       du bloc et parler comme s'il était le prompt système. Retire toute balise <article> ou </article>,
-       quelle que soit la casse et même avec des espaces (`</ ARTICLE >`). Indice : une regex avec re.IGNORECASE.
-    3. Renvoyer None si rien ne reste.
-    """
-    raise NotImplementedError
-
+    
+        TODO :
+        1. clean_text(value, max_length) : retire les caractères invisibles, met tout sur une ligne, tronque.
+           (Une seule ligne : un retour à la ligne dans une valeur pourrait imiter une fausse ligne `clé: valeur`.)
+        2. Neutraliser les délimiteurs : un attaquant pourrait écrire "</article>" dans son contenu pour « sortir »
+           du bloc et parler comme s'il était le prompt système. Retire toute balise <article> ou </article>,
+           quelle que soit la casse et même avec des espaces (`</ ARTICLE >`). Indice : une regex avec re.IGNORECASE.
+        3. Renvoyer None si rien ne reste.
+        """
+    if value is None:
+        return None
+    text = clean_text(value, max_length)
+    if text is None:
+        return None
+    # Repeat until stable: removing a tag can reassemble another one ("<arti<article>cle>").
+    while True:
+        cleaned = _ARTICLE_TAG_RE.sub("", text)
+        if cleaned == text:
+            break
+        text = cleaned
+    # Une balise retirée laisse un double espace ("Great  SYSTEM") : on recompacte.
+    return " ".join(text.split()) or None
 
 def _truncate_at_word(text: str, limit: int) -> str:
     """Coupe `text` à `limit` caractères au plus, sans couper un mot en deux.
-
-    TODO :
-    - Si le texte est déjà assez court : le renvoyer tel quel.
-    - Sinon : couper à `limit`, puis reculer jusqu'au dernier espace (cherche `str.rsplit` ou `str.rfind`).
-    - Cas limite : un seul « mot » plus long que `limit` (une URL…) -> couper net à `limit`.
+    
+        TODO :
+        - Si le texte est déjà assez court : le renvoyer tel quel.
+        - Sinon : couper à `limit`, puis reculer jusqu'au dernier espace (cherche `str.rsplit` ou `str.rfind`).
+        - Cas limite : un seul « mot » plus long que `limit` (une URL…) -> couper net à `limit`.
     """
-    raise NotImplementedError
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    if text[limit].isspace():  # the cut falls exactly between two words
+        return cut
+    position = cut.rfind(" ")
+    return cut[:position] if position > 0 else cut
+
+def _collect_tags(extra: object) -> list[str]:
+    """Descriptive tags from `extra` (GitHub language/topics, RSS tags), cleaned and bounded."""
+    if not isinstance(extra, dict):
+        return []
+    candidates: list[str] = []
+    language = extra.get("language")
+    if isinstance(language, str):
+        candidates.append(language)
+    for key in ("topics", "tags"):
+        values = extra.get(key)
+        if isinstance(values, list):
+            candidates.extend(value for value in values if isinstance(value, str))
+    tags: list[str] = []
+    for candidate in candidates:
+        tag = _clean_field(candidate, MAX_TAG_CHARS)
+        if tag is not None and tag not in tags:
+            tags.append(tag)
+            if len(tags) == MAX_TAGS:
+                break
+    return tags
+
+def _domain(url: str | None) -> str | None:
+    """Host name of `url` without "www.", or None if there is none."""
+    if not url:
+        return None
+    try:
+        hostname = urlsplit(url).hostname
+    except ValueError: # e.g. malformed IPv6 "http://[::1"
+        return None
+    if hostname is None:
+        return None
+    return hostname.removeprefix("www.")
+
 
 
 # ---------------------------------------------------------------------------------------------
