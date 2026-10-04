@@ -97,7 +97,7 @@ docs/                  # doc technique en anglais : architecture/, decisions/ (A
 tests/                 # pytest, même arborescence que src/ ; conftest.py = fixtures partagées
 ```
 
-Tenir `docs/` à jour à chaque étape terminée : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
+Tenir `docs/` à jour à chaque étape terminée (ADR 0001 à 0020 à jour au 2026-10-04 ; document perso `PREPARATION_ENTRETIEN.md`, ignoré par git, à enrichir avec les nouvelles décisions) : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
 
 **Diagrammes : toujours en Mermaid** (bloc ` ```mermaid `), jamais en ASCII art (`┌──►`…), qui s'affiche mal. Dans les étiquettes, éviter les guillemets imbriqués, les apostrophes, les accolades et le JSON (ex. `'{"summary": ""}'` cassait tout le diagramme) : écrire en mots simples (`empty summary`), et mettre le texte des nœuds entre `"…"`. Les arborescences de fichiers restent en bloc ` ```text `.
 
@@ -230,6 +230,14 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 - Répartition Soirée 2 : Claude fait la plomberie (réglages, sécurité, `.env`), je code le client LLM, le scoring, le résumé et la boucle.
 - Tests : pytest (dev uniquement), aucune autre dépendance de test. Réseau simulé par `httpx.MockTransport` (fixture `fake_http`, qui garde les vrais réglages de `http_client()` et les vrais contrôles de `fetch()`), vrai réseau bloqué par la fixture autouse `no_network`. `main()` testé avec un faux type de collector enregistré dans `COLLECTOR_TYPES`.
 - Workflow git : branches `feature/<nom-kebab>` via `git flow feature start`, poussées puis mergées dans `dev` **par MR GitHub** (pas de `git flow feature finish`, qui merge en local).
+
+## 🎯 Passage au niveau « pro » (portfolio agentique) — à faire après la boucle agentique (Soirée 2)
+
+Objectif du projet : portfolio pour basculer vers le dev agentique. Évaluation actuelle : semi-pro, pratiques d'ingénierie de niveau pro. À faire après la Soirée 2 (moment naturel : on aura de toute façon des choses à déployer) :
+1. **Jeu d'évaluation du LLM** (le manque le plus visible pour un poste agentique) : ~20 articles avec la note attendue (et quelques cas pièges : injection, sujet exclu, contenu vide), une commande reproductible (ex. `uv run python -m tech_radar_agent.eval`) qui donne un score par prompt/modèle. Transforme nos mesures ponctuelles en démarche reproductible ; servira aussi à recalibrer `AGENT_SUMMARY_THRESHOLD` en changeant de modèle. ⚠️ Lancement sur Ollama local uniquement avec mon accord (RAM).
+2. **CI GitHub Actions** (gratuite, dépôt public) : pytest + `ruff` + `mypy` sur chaque PR. Nouvelles dépendances de dev à valider selon les règles de sécurité ; actions épinglées par SHA. **Pas de runner auto-hébergé** (dangereux sur un dépôt public : une PR de fork exécuterait du code sur mon Mac).
+3. **README orienté recruteur** : le problème, l'architecture en un schéma Mermaid, 3-4 décisions clés **avec leurs mesures**, limites connues, capture d'un vrai digest.
+(Le point 1 de la liste, « finir et déployer », correspond aux Soirées 2-3. Exécution quotidienne prévue via une API LLM distante sur les machines GitHub : qwen3.6 local impossible en CI, pas de GPU ni assez de RAM.)
 
 ## Pistes déjà évoquées (non décidées, à rediscuter le moment venu)
 - Résumés manquants sur les posts courts qui **citent un message** (ex. « Quoting Muse AI Agent » de Simon Willison) : le `Summarizer` renvoie `None` (« rien à résumer »). Cause vérifiée : la consigne de fidélité, **pas** la règle anti-injection. Impact faible (résumé seulement si score ≥ 8). À revoir seulement si ça gêne dans les vrais digests ; **ne jamais** régler ça en assouplissant la règle anti-injection.
