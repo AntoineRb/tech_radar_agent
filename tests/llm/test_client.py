@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from tech_radar_agent.llm import LlmSettings
-from tech_radar_agent.llm.client import LlmClient, LlmError
+from tech_radar_agent.llm.client import LlmClient, LlmError, LlmFatalError, LlmTemporaryError
 
 BASE_URL = "https://api.example.com/v1"
 MESSAGES = [{"role": "system", "content": "You rate articles."}, {"role": "user", "content": "Rate this."}]
@@ -290,3 +290,91 @@ def test_api_key_never_appears_in_logs(server, caplog):
     assert "sk-super-secret" not in caplog.text
     assert "sk-super-secret" not in str(error.value)
     assert "sk-super-secret" not in repr(client.__dict__)
+
+
+# --- Error categories: how callers should react ---
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_temporary_statuses(server, status):
+    server.reply = httpx.Response(status, json={"error": "busy"})
+    with pytest.raises(LlmTemporaryError, match=f"HTTP {status}"):
+        server.client().chat(MESSAGES)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404])
+def test_fatal_statuses(server, status):
+    server.reply = httpx.Response(status, json={"error": "bad setup"})
+    with pytest.raises(LlmFatalError, match=f"HTTP {status}"):
+        server.client().chat(MESSAGES)
+
+
+@pytest.mark.parametrize("status", [301, 302, 307, 308])
+def test_redirects_are_fatal(server, status):
+    # Never followed: LLM_BASE_URL points to the wrong place.
+    server.reply = httpx.Response(status, headers={"Location": "https://elsewhere.example.com/"})
+    with pytest.raises(LlmFatalError):
+        server.client().chat(MESSAGES)
+
+
+@pytest.mark.parametrize("status", [405, 413, 422, 501])
+def test_other_statuses_concern_this_call_only(server, status):
+    server.reply = httpx.Response(status)
+    with pytest.raises(LlmError) as error:
+        server.client().chat(MESSAGES)
+    assert type(error.value) is LlmError  # Neither temporary nor fatal.
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        (httpx.ConnectError("Connection refused"), LlmFatalError),  # Server not running, or wrong URL.
+        (httpx.ConnectTimeout("slow"), LlmTemporaryError),
+        (httpx.ReadTimeout("slow"), LlmTemporaryError),
+        (httpx.ReadError("connection reset"), LlmTemporaryError),
+        (httpx.RemoteProtocolError("server disconnected"), LlmTemporaryError),
+    ],
+)
+def test_network_error_categories(server, failure, expected):
+    server.reply = failure
+    with pytest.raises(expected) as error:
+        server.client().chat(MESSAGES)
+    assert error.value.__cause__ is failure
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        pytest.param(answer(None), id="content-none"),
+        pytest.param(answer("A summary that stops", finish_reason="length"), id="cut-off"),
+        pytest.param({"choices": []}, id="malformed"),
+    ],
+)
+def test_bad_answers_concern_this_call_only(server, reply):
+    server.reply = reply
+    with pytest.raises(LlmError) as error:
+        server.client().chat(MESSAGES)
+    assert not isinstance(error.value, LlmTemporaryError | LlmFatalError)
+
+
+@pytest.mark.parametrize(("header", "expected"), [("12", 12.0), ("0.5", 0.5), ("0", 0.0)])
+def test_retry_after_seconds_are_kept(server, header, expected):
+    server.reply = httpx.Response(429, headers={"Retry-After": header})
+    with pytest.raises(LlmTemporaryError) as error:
+        server.client().chat(MESSAGES)
+    assert error.value.retry_after == expected
+
+
+@pytest.mark.parametrize("header", [None, "Wed, 21 Oct 2026 07:28:00 GMT", "soon", "-5", "inf", "nan"])
+def test_retry_after_is_none_when_absent_or_not_a_number(server, header):
+    headers = {"Retry-After": header} if header is not None else {}
+    server.reply = httpx.Response(503, headers=headers)
+    with pytest.raises(LlmTemporaryError) as error:
+        server.client().chat(MESSAGES)
+    assert error.value.retry_after is None
+
+
+def test_error_categories_are_llm_errors():
+    # `except LlmError` still catches everything.
+    assert issubclass(LlmTemporaryError, LlmError)
+    assert issubclass(LlmFatalError, LlmError)

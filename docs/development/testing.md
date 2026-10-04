@@ -23,9 +23,10 @@ tests/
 ├── test_main.py             # main(): orchestration, failures, exit codes
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
-├── test_storage.py          # connect, save_articles (dedup, types, NULL columns)
+├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary
 ├── agent/
-│   └── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
+│   ├── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
+│   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
 │   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
