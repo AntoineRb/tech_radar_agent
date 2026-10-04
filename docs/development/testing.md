@@ -26,7 +26,8 @@ tests/
 ├── test_storage.py          # connect, save_articles (dedup, types, NULL columns)
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
-│   └── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
+│   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
+│   └── test_cli.py          # python -m tech_radar_agent.llm (setup check command)
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
     ├── test_registry.py     # build_collector, COLLECTOR_TYPES
@@ -67,6 +68,8 @@ A route without a query string also matches requests with one. Unknown URLs get 
 `test_main.py` registers a `FakeCollector` (`type: fake`) in `COLLECTOR_TYPES`, then runs `main()` in an empty temporary folder. This tests the orchestration without any HTTP. `caplog.set_level(logging.INFO)` is needed there, because pytest's own log handlers make `main()`'s `basicConfig()` a no-op.
 
 ## Rules
+
+- Test file names must be unique across folders (there is no `__init__.py` in `tests/`): `tests/llm/test_cli.py`, not a second `test_main.py`.
 
 - **Every feature ships with its tests.** Adding or changing a feature means adding or updating the matching tests in the same merge request.
 - **Every bug fix ships with a test** that fails without the fix.
