@@ -197,14 +197,14 @@ class LlmClient:
         return {key: value for key, value in body.items() if value is not None}
 
     def close(self) -> None:
-        """Libère la connexion. TODO : fermer le httpx.Client."""
-        raise NotImplementedError
+        """Libère la connexion."""
+        self._http_client.close()
 
     def __enter__(self) -> "LlmClient":
-        """Appelé par `with LlmClient(...) as llm:`. TODO : que doit valoir `llm` ?"""
-        raise NotImplementedError
+        """Appelé par `with LlmClient(...) as llm:`"""
+        return self
 
     def __exit__(self, *exc_info: object) -> None:
-        """Appelé à la sortie du bloc `with`, même après une exception. TODO : faire le ménage."""
-        raise NotImplementedError
+        """Appelé à la sortie du bloc `with`, même après une exception. """
+        self.close()
 
