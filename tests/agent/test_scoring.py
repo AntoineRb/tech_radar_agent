@@ -27,12 +27,14 @@ from tech_radar_agent.agent.scoring import (
     Score,
     Scorer,
     ScoreValidationError,
+    DuplicateKeyError,
     _clean_field,
     _domain,
     _truncate_at_word,
     build_article_message,
     build_system_prompt,
     parse_score,
+    reject_duplicate_keys,
 )
 from tech_radar_agent.config import Profile, load_config, parse_profile
 from tech_radar_agent.llm.client import LlmError
@@ -231,6 +233,14 @@ def test_parse_score_validates_json_inside_fences_too():
         parse_score(f"```json\n{answer(score=42)}\n```", ALLOWED_IDS)
 
 
+def test_duplicate_key_error_is_neutral():
+    # Shared by parse_score and parse_summary: a plain ValueError that each parser turns into its own error.
+    assert issubclass(DuplicateKeyError, ValueError) and not issubclass(DuplicateKeyError, LlmError)
+    with pytest.raises(DuplicateKeyError):
+        reject_duplicate_keys([("a", 1), ("a", 2)])
+    assert reject_duplicate_keys([("a", 1), ("b", 2)]) == {"a": 1, "b": 2}
+
+
 def test_score_validation_error_is_an_llm_error():
     # Callers can catch every failure with `except LlmError`, or this case alone.
     assert issubclass(ScoreValidationError, LlmError)
@@ -336,6 +346,30 @@ def test_article_message_content_is_truncated_at_a_word():
     content = field(make_article(content="word " * 600), "content")
     assert len(content) <= SCORING_CONTENT_CHARS
     assert content.endswith("word")  # Not "wo".
+
+
+def test_article_message_accepts_a_longer_content_limit():
+    long_content = ("word " * 500).strip()  # 2,499 characters.
+    article = make_article(content=long_content)
+
+    content = build_article_message(article, content_chars=3000).split("content: ")[1].split("\n")[0]
+    assert content == long_content  # Sent in full.
+
+    assert len(field(article, "content")) <= SCORING_CONTENT_CHARS  # Default unchanged: scoring still gets 1,000.
+
+
+def test_article_message_content_limit_is_keyword_only():
+    # build_article_message(article, 3000) would be ambiguous: the name must be written.
+    with pytest.raises(TypeError):
+        build_article_message(make_article(), 3000)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("limit", [600, 2000])
+def test_article_message_longer_limit_still_cuts_at_a_word(limit):
+    content = build_article_message(make_article(content="word " * 600), content_chars=limit)
+    sent = content.split("content: ")[1].split("\n")[0]
+    assert len(sent) <= limit
+    assert sent.endswith("word")
 
 
 @pytest.mark.parametrize(

@@ -119,8 +119,7 @@ The crafted cases are: an injection inside a crypto article (0), a research pape
 
 ## Not done yet
 
-- The scoring is not wired into `main()` yet, and scores are not stored. That comes with the agent loop (threshold, summary, storing `score`, `reason` and `interests`).
-- The agent loop (scoring recent articles, summaries above the threshold, storing results) is being built.
+- The scoring is not wired into `main()` yet, and scores are not stored. That comes with the agent loop (scoring recent articles, [summaries](summary.md) above the threshold, storing results).
 
 ## Errors
 

@@ -46,7 +46,7 @@ ARTICLE_CLOSE = "</article>"
 _REQUIRED_FIELDS = frozenset({"score", "reason", "interests"})
 
 # JSON wrapped in a Markdown code fence: ```json {...} ``` or ``` {...} ```, on one or several lines.
-_CODE_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", flags=re.DOTALL | re.IGNORECASE)
+CODE_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", flags=re.DOTALL | re.IGNORECASE)
 
 # An opening or closing article tag, whatever the case and spacing: <article>, </ ARTICLE >, <article id="x">.
 _ARTICLE_TAG = re.compile(r"<\s*/?\s*article\b[^>]*>", flags=re.IGNORECASE)
@@ -84,12 +84,14 @@ def parse_score(text: str, allowed_ids: frozenset[str]) -> Score:
     # Decision: a Markdown fence around the JSON is tolerated. It is packaging, not content, and the
     # JSON inside goes through exactly the same checks. The whole answer must be a single fence.
     text = text.strip()
-    fence = _CODE_FENCE.fullmatch(text)
+    fence = CODE_FENCE.fullmatch(text)
     if fence:
         text = fence.group(1)
 
     try:
-        data = json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+        data = json.loads(text, object_pairs_hook=reject_duplicate_keys)
+    except DuplicateKeyError as exc:
+        raise ScoreValidationError("LLM answer has duplicate keys") from exc
     except json.JSONDecodeError as exc:
         raise ScoreValidationError("LLM answer is not valid JSON") from exc
 
@@ -138,26 +140,36 @@ def parse_score(text: str, allowed_ids: frozenset[str]) -> Score:
     return Score(score=score, reason=reason, interests=tuple(dict.fromkeys(interests)))  # Dedup, order kept.
 
 
-def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """json.loads hook, called for every JSON object: refuse a key that appears twice.
+class DuplicateKeyError(ValueError):
+    """Raised by reject_duplicate_keys. Neutral on purpose: each parser turns it into its own error."""
+
+
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """json.loads hook, called for every JSON object: refuse a key that appears twice (DuplicateKeyError).
 
     Otherwise '{"score": 2, "score": 10}' would silently give 10 (the last value wins).
     """
     keys = [key for key, _ in pairs]
     if len(keys) != len(set(keys)):
-        raise ScoreValidationError("LLM answer has duplicate keys")
+        raise DuplicateKeyError("duplicate keys in a JSON object")
     return dict(pairs)
 
 
 # --- User message: the article (untrusted) ---
 
 
-def build_article_message(article: Article) -> str:
+def build_article_message(article: Article, *, content_chars: int = SCORING_CONTENT_CHARS) -> str:
     """Build the user message: the article alone, between delimiters, as `key: value` lines.
 
-    Only what helps judge relevance is sent (decision 2/5): no author or dates, and no popularity
-    (HN points, GitHub stars), which the LLM would mistake for relevance. Every value is cleaned
-    again here, even fields already cleaned at collection time, and `extra` was never cleaned.
+    Only what helps judge relevance is sent: no author or dates, and no popularity (HN points,
+    GitHub stars), which the LLM would mistake for relevance. Every value is cleaned again here,
+    even fields already cleaned at collection time, and `extra` was never cleaned.
+
+    Args:
+        article: the article to present to the LLM.
+        content_chars: how much content to send, cut at the end of a word. SCORING_CONTENT_CHARS
+            (1,000) for scoring; summaries need more. Content is already capped at 3,000 characters
+            at collection time, so a higher value changes nothing.
 
     Example:
         <article>
@@ -169,7 +181,7 @@ def build_article_message(article: Article) -> str:
         </article>
     """
     # Truncated before cleaning, so that the cut falls at the end of a word.
-    content = _truncate_at_word(article.content, SCORING_CONTENT_CHARS) if article.content else None
+    content = _truncate_at_word(article.content, content_chars) if article.content else None
     tags = _collect_tags(article.extra)
 
     # A list, not a set: the line order must be the same for every article.
@@ -178,7 +190,7 @@ def build_article_message(article: Article) -> str:
         ("domain", _clean_field(_domain(article.url), MAX_FIELD_CHARS)),
         ("title", _clean_field(article.title, MAX_TITLE_CHARS)),
         ("tags", ", ".join(tags) or None),
-        ("content", _clean_field(content, SCORING_CONTENT_CHARS)),
+        ("content", _clean_field(content, content_chars)),
     ]
 
     lines = [ARTICLE_OPEN]

@@ -85,7 +85,7 @@ Implemented for scoring in `agent/scoring.py` (see [scoring](architecture/scorin
 - The system prompt says that the block is untrusted data, that instructions inside it must be ignored even if they claim to come from the system, and that an article *about* prompt injection is normal content.
 - The answer is strict JSON, validated by `parse_score`: exactly three fields, no duplicate keys, an integer score from 0 to 10 (`true`, `7.0` and `"7"` refused), a cleaned `reason`, and only interest ids from the profile. Any problem rejects the article. The output is never guessed or repaired.
 - Measured with qwen3.6: an article combining an injection attempt and a crypto pitch was scored 0.
-- The summary will follow the same rules.
+- The summary follows the same rules (`agent/summary.py`, see [summary](architecture/summary.md)), plus one: it is shown to a human, so anything clickable or executable is rejected (URLs, `javascript:`/`data:` schemes, Markdown links, HTML tags by name, event handler attributes). The check runs after cleaning, so an invisible character cannot hide a link, and before truncating, so a link past the length limit still rejects the answer. The summary prompt also tells the model never to repeat instructions found in the article.
 - The scoring and summary LLM has **no tools and no side effects**. It only returns text. This is enforced by `LlmClient`, not left to convention:
   - `chat()` refuses `tools`, `tool_choice`, `parallel_tool_calls`, `functions` and `function_call` options (`TypeError`, nothing is sent);
   - an answer containing a tool call is rejected (`LlmError`);
@@ -127,5 +127,5 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 | Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
 | URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |
 | Prompt delimiting, delimiter neutralization, strict output validation, no tools | ✅ Scoring (`agent/scoring.py`, `llm/client.py`) |
-| Same rules for the summary | 🔜 Summary |
+| Same rules for the summary, plus no links or HTML in it | ✅ Summary (`agent/summary.py`) |
 | Output escaping in the digest | 🔜 Delivery |

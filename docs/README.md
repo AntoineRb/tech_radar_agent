@@ -12,7 +12,8 @@ docs/
 │   ├── data-model.md         # the Article model and URL normalization
 │   ├── collectors.md         # source plugins and how to add one
 │   ├── storage.md            # SQLite schema and storage API
-│   └── scoring.md            # LLM scoring: prompts, answer validation, measurements
+│   ├── scoring.md            # LLM scoring: prompts, answer validation, measurements
+│   └── summary.md            # LLM summary: what it says, when there is none, link and HTML filter
 ├── decisions/                # one file per architecture decision (ADR)
 │   └── README.md             # decision log
 └── development/
@@ -36,6 +37,7 @@ docs/
 - [Collectors](architecture/collectors.md): how sources are plugged in and configured.
 - [Storage](architecture/storage.md): how articles are persisted and deduplicated in SQLite.
 - [Scoring](architecture/scoring.md): how the LLM rates each article against the profile, and how its answer is validated.
+- [Summary](architecture/summary.md): how the best articles get a short, faithful summary, and why some get none.
 
 ## Decisions
 
