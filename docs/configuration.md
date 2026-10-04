@@ -7,7 +7,7 @@ Configuration comes from two places:
 
 ## `config/interests.yaml`
 
-Everything the agent needs to know about you lives in [`config/interests.yaml`](../config/interests.yaml). The file has two sections: the interest profile, used by the LLM to score articles, and the list of sources. It is loaded by `config.load_config()` with `yaml.safe_load` (see [security](security.md)).
+Everything the agent needs to know about you lives in [`config/interests.yaml`](../config/interests.yaml). The file has two sections: the interest profile, used by the LLM to score articles, and the list of sources. It is loaded by `config.load_config()` with `yaml.safe_load` (see [security](security.md)). `load_config()` returns a typed `Config` with a `profile` (`Profile`, `Interest`) and the raw `sources`.
 
 ### `profile`: what you care about
 
@@ -15,28 +15,37 @@ Everything the agent needs to know about you lives in [`config/interests.yaml`](
 profile:
   about: >
     A few sentences about who you are and what you look for.
+  language: French
   interests:
     high:
-      - AI agents (architecture, tool use, memory, evaluation)
+      ai-agents: AI agents (architecture, tool use, memory, evaluation)
     medium:
-      - Apple (platforms, developer tools, hardware)
+      apple: Apple (platforms, developer tools, hardware)
     low:
-      - Open source projects gaining traction
+      open-source: Open source projects gaining traction
   not_interested:
     - Crypto and blockchain
 ```
 
-| Key | Meaning |
-|---|---|
-| `about` | Free text that gives the LLM some context. `>` joins the lines into one paragraph |
-| `interests.high` / `medium` / `low` | Topics by priority. The scoring prompt can weigh them differently |
-| `not_interested` | Topics that should lower the score, even if they match an interest |
+| Key | Required | Meaning |
+|---|---|---|
+| `about` | yes | Free text that gives the LLM some context. `>` joins the lines into one paragraph |
+| `language` | no (default `English`) | Language of the text you read in the digest, as a plain name (`French`, not `fr`). Prompt instructions stay in English |
+| `interests.high` / `medium` / `low` | at least one interest | Topics by priority, as `id: description` (see below). Empty priorities are allowed |
+| `not_interested` | no | Topics that should lower the score, even if they match an interest |
+
+**Interest ids and descriptions** ([ADR 0009](decisions/0009-scoring-output-and-interest-ids.md)):
+
+- The **id** (`ai-agents`) is what the LLM returns for a matching article and what is stored in the database. It uses lowercase letters, digits and dashes, and must be unique. **Keep it stable**: renaming it breaks the link with articles already scored.
+- The **description** is what the LLM reads. Reword it whenever you like.
+- Removing a line stops new articles from being tagged with that interest. Articles already scored keep their ids.
 
 Tips:
 
-- Topics are free text. The LLM matches meaning rather than keywords.
+- Descriptions are free text. The LLM matches meaning rather than keywords.
 - Be specific. "Apple (platforms, developer tools, hardware)" gives better results than "Apple", which would also match earnings and rumors.
 - The exclusion list matters as much as the interests: it is what keeps the digest short.
+- Keep the list short (about 10 to 15 interests, checked by a test). A long list makes the prompt longer and the model less focused.
 
 ### `sources`: where articles come from
 
@@ -65,6 +74,7 @@ Rules:
 The whole configuration is checked **before any network call**. The run stops with exit code `2` in these cases:
 
 - the file is missing or is not valid YAML;
+- the profile is incomplete or invalid (no `about`, no interest, unknown priority, invalid or duplicate interest id…);
 - a YAML tag tries to build a Python object;
 - `sources` is missing or empty;
 - a source has an unknown `type` or a misspelled option;
