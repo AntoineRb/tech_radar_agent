@@ -25,7 +25,8 @@ tests/
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect, save_articles (dedup, types, NULL columns)
 ├── llm/
-│   └── test_settings.py     # environment variables, localhost-only http, secret handling
+│   ├── test_settings.py     # environment variables, localhost-only http, secret handling
+│   └── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
     ├── test_registry.py     # build_collector, COLLECTOR_TYPES
@@ -56,6 +57,10 @@ def test_something(fake_http):
 ```
 
 A route without a query string also matches requests with one. Unknown URLs get a 404. The collectors still use the real `http_client()` settings (User-Agent, redirects) and the real `fetch()` checks. Only the network layer is replaced, through `httpx.MockTransport`.
+
+### Testing the LLM client
+
+`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed.
 
 ### Testing `main()`
 
