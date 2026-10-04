@@ -92,6 +92,17 @@ In CI (GitHub Actions), they come from the repository secrets.
 
 They are read by `llm.load_llm_settings()`, which raises `ValueError` if a required variable is missing, if the URL is not allowed, or if the timeout is not a positive number. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
 
+### Checking the LLM setup
+
+Send one message to the configured LLM and print the answer:
+
+```bash
+uv run --env-file .env python -m tech_radar_agent.llm                       # default prompt: expects "pong"
+uv run --env-file .env python -m tech_radar_agent.llm --debug "Your prompt"  # also logs duration and tokens
+```
+
+Exit codes: `0` answer printed, `1` the LLM failed (server down, bad key…), `2` invalid settings. The API key is never printed.
+
 ### Local model with Ollama
 
 1. Install [Ollama](https://ollama.com) and pull a model from its library (the exact tag is shown on the model's page), for example `ollama pull qwen3:4b`.
