@@ -26,6 +26,7 @@ tests/
 ├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary
 ├── agent/
 │   ├── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
+│   ├── test_summary.py      # parse_summary (links, HTML, false positives, hidden links), summary prompt, Summarizer
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling

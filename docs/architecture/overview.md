@@ -22,7 +22,8 @@ flowchart LR
 | LLM settings (local or remote) | ✅ Done | `llm/settings.py`, `.env.example` |
 | LLM client (no tools, strict response checks) | ✅ Done | `llm/client.py` |
 | Scoring: prompts and answer validation | ✅ Done, not wired into `main()` yet | `agent/scoring.py` ([details](scoring.md)) |
-| Agent loop: threshold, summary, storing results | 🔜 Next | `agent/` |
+| Summary: what the article brings, links and HTML rejected | ✅ Done, not wired into `main()` yet | `agent/summary.py` ([details](summary.md)) |
+| Agent loop: threshold, retries, storing results, wiring into `main()` | 🔜 Next | `agent/` |
 | Digest and delivery | Planned | — |
 | Feedback | Planned | — |
 
@@ -38,6 +39,7 @@ src/tech_radar_agent/
 ├── sanitize.py      # cleaning and validation of untrusted collected data
 ├── agent/
 │   ├── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
+│   ├── summary.py   # Summarizer: summary prompt, LLM call, answer validation (no links, no HTML)
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
 ├── llm/
 │   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment
