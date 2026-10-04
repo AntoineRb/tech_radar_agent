@@ -117,6 +117,39 @@ def test_reserved_options_raise_type_error(server, option):
     assert server.requests == []  # Refused before anything is sent.
 
 
+@pytest.mark.parametrize("option", ["tools", "tool_choice", "parallel_tool_calls", "functions", "function_call"])
+def test_tools_can_never_be_offered_to_the_llm(server, option):
+    # Security rule: the LLM gets no tools, so it can never ask this program to run anything.
+    with pytest.raises(TypeError, match="Tools are not allowed"):
+        server.client().chat(MESSAGES, **{option: [{"type": "function", "function": {"name": "run_shell"}}]})
+    assert server.requests == []  # Refused before anything is sent.
+
+
+def test_requests_never_contain_tools(server):
+    server.client().chat(MESSAGES, temperature=0)
+    assert not {"tools", "tool_choice", "functions"} & server.last_body.keys()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        pytest.param(
+            {"role": "assistant", "content": None, "tool_calls": [{"type": "function", "function": {"name": "rm"}}]},
+            id="tool-calls",
+        ),
+        pytest.param(
+            {"role": "assistant", "content": "ok", "tool_calls": [{"type": "function", "function": {"name": "rm"}}]},
+            id="tool-calls-with-text",
+        ),
+        pytest.param({"role": "assistant", "content": None, "function_call": {"name": "rm"}}, id="legacy-function-call"),
+    ],
+)
+def test_tool_call_answers_are_refused(server, message):
+    server.reply = {"choices": [{"message": message, "finish_reason": "tool_calls"}]}
+    with pytest.raises(LlmError, match="tool call"):
+        server.client().chat(MESSAGES)
+
+
 # --- Response: what the client returns ---
 
 
