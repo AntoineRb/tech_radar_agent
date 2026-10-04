@@ -12,6 +12,7 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0006](0006-pluggable-collectors.md) | Pluggable, config-driven collectors | Accepted |
 | [0007](0007-security-baseline.md) | Security baseline: trusted dependencies, verified sources, untrusted content | Accepted |
 | [0008](0008-llm-via-openai-compatible-api.md) | One LLM client for local and remote models, configured by environment variables | Accepted |
+| [0009](0009-scoring-output-and-interest-ids.md) | Scoring output: score, reason and interest ids from the profile | Accepted |
 
 ## Template
 
