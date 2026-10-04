@@ -27,12 +27,14 @@ from tech_radar_agent.agent.scoring import (
     Score,
     Scorer,
     ScoreValidationError,
+    DuplicateKeyError,
     _clean_field,
     _domain,
     _truncate_at_word,
     build_article_message,
     build_system_prompt,
     parse_score,
+    reject_duplicate_keys,
 )
 from tech_radar_agent.config import Profile, load_config, parse_profile
 from tech_radar_agent.llm.client import LlmError
@@ -229,6 +231,14 @@ def test_parse_score_rejects_text_around_fences(text):
 def test_parse_score_validates_json_inside_fences_too():
     with pytest.raises(ScoreValidationError, match="score must be"):
         parse_score(f"```json\n{answer(score=42)}\n```", ALLOWED_IDS)
+
+
+def test_duplicate_key_error_is_neutral():
+    # Shared by parse_score and parse_summary: a plain ValueError that each parser turns into its own error.
+    assert issubclass(DuplicateKeyError, ValueError) and not issubclass(DuplicateKeyError, LlmError)
+    with pytest.raises(DuplicateKeyError):
+        reject_duplicate_keys([("a", 1), ("a", 2)])
+    assert reject_duplicate_keys([("a", 1), ("b", 2)]) == {"a": 1, "b": 2}
 
 
 def test_score_validation_error_is_an_llm_error():

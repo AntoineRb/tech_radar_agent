@@ -90,6 +90,8 @@ def parse_score(text: str, allowed_ids: frozenset[str]) -> Score:
 
     try:
         data = json.loads(text, object_pairs_hook=reject_duplicate_keys)
+    except DuplicateKeyError as exc:
+        raise ScoreValidationError("LLM answer has duplicate keys") from exc
     except json.JSONDecodeError as exc:
         raise ScoreValidationError("LLM answer is not valid JSON") from exc
 
@@ -138,14 +140,18 @@ def parse_score(text: str, allowed_ids: frozenset[str]) -> Score:
     return Score(score=score, reason=reason, interests=tuple(dict.fromkeys(interests)))  # Dedup, order kept.
 
 
+class DuplicateKeyError(ValueError):
+    """Raised by reject_duplicate_keys. Neutral on purpose: each parser turns it into its own error."""
+
+
 def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """json.loads hook, called for every JSON object: refuse a key that appears twice.
+    """json.loads hook, called for every JSON object: refuse a key that appears twice (DuplicateKeyError).
 
     Otherwise '{"score": 2, "score": 10}' would silently give 10 (the last value wins).
     """
     keys = [key for key, _ in pairs]
     if len(keys) != len(set(keys)):
-        raise ScoreValidationError("LLM answer has duplicate keys")
+        raise DuplicateKeyError("duplicate keys in a JSON object")
     return dict(pairs)
 
 
