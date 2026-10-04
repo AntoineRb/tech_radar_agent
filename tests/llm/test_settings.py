@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from tech_radar_agent.llm import LlmSettings, is_allowed_llm_url, load_llm_settings
+from tech_radar_agent.llm.settings import DEFAULT_REQUEST_TIMEOUT
 
 ENV_EXAMPLE = Path(__file__).parents[2] / ".env.example"
 
@@ -46,6 +47,43 @@ class TestLoad:
         with pytest.raises(ValueError, match="https"):
             load_llm_settings({"LLM_BASE_URL": "http://api.example.com/v1", "LLM_MODEL": "m"})
 
+    def test_optional_tuning_defaults(self):
+        settings = load_llm_settings({"LLM_BASE_URL": "http://localhost:11434/v1", "LLM_MODEL": "m"})
+        assert settings.reasoning_effort is None
+        assert settings.request_timeout == DEFAULT_REQUEST_TIMEOUT
+
+    def test_optional_tuning_from_environment(self):
+        settings = load_llm_settings(
+            {
+                "LLM_BASE_URL": "http://localhost:11434/v1",
+                "LLM_MODEL": "m",
+                "LLM_REASONING_EFFORT": " none ",
+                "LLM_REQUEST_TIMEOUT": "2.5",
+            }
+        )
+        assert settings.reasoning_effort == "none"
+        assert settings.request_timeout == 2.5
+
+    @pytest.mark.parametrize("value", ["", "   "])
+    def test_empty_tuning_means_default(self, value):
+        settings = load_llm_settings(
+            {
+                "LLM_BASE_URL": "http://localhost:11434/v1",
+                "LLM_MODEL": "m",
+                "LLM_REASONING_EFFORT": value,
+                "LLM_REQUEST_TIMEOUT": value,
+            }
+        )
+        assert settings.reasoning_effort is None
+        assert settings.request_timeout == DEFAULT_REQUEST_TIMEOUT
+
+    @pytest.mark.parametrize("value", ["abc", "30s", "0", "-5", "nan", "inf"])
+    def test_invalid_timeout(self, value):
+        with pytest.raises(ValueError, match="LLM_REQUEST_TIMEOUT"):
+            load_llm_settings(
+                {"LLM_BASE_URL": "http://localhost:11434/v1", "LLM_MODEL": "m", "LLM_REQUEST_TIMEOUT": value}
+            )
+
     def test_reads_the_process_environment_by_default(self, monkeypatch):
         monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:11434/v1")
         monkeypatch.setenv("LLM_MODEL", "m")
@@ -71,7 +109,9 @@ class TestSecrets:
             for line in ENV_EXAMPLE.read_text().splitlines()
             if line and not line.startswith("#")
         )
-        assert load_llm_settings(environ).is_local
+        settings = load_llm_settings(environ)
+        assert settings.is_local
+        assert settings.reasoning_effort == "none"
 
 
 class TestAllowedUrl:
