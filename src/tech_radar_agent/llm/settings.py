@@ -6,10 +6,13 @@ from urllib.parse import urlsplit
 # The only hosts allowed over plain http: a model served on this machine (e.g. Ollama).
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
+# Covers a local model loading into memory on its first call (~20 s measured with qwen3.6).
+DEFAULT_REQUEST_TIMEOUT = 30.0
+
 
 @dataclass(frozen=True)
 class LlmSettings:
-    """Where the LLM is: any server speaking the OpenAI chat completions format.
+    """Where the LLM is and how to call it: any server speaking the OpenAI chat completions format.
 
     Local (Ollama): base_url="http://localhost:11434/v1", no api_key.
     Remote API: base_url="https://...", api_key required by most providers.
@@ -18,6 +21,10 @@ class LlmSettings:
     base_url: str  # Without trailing slash, e.g. "http://localhost:11434/v1".
     model: str
     api_key: str | None = field(default=None, repr=False)  # repr=False: never printed in logs.
+    # Sent as "reasoning_effort" in every request when set (e.g. "none" turns off a model's thinking).
+    # None: the field is not sent, for servers that do not support it.
+    reasoning_effort: str | None = None
+    request_timeout: float = DEFAULT_REQUEST_TIMEOUT  # Seconds, for one LLM call.
 
     @property
     def is_local(self) -> bool:
@@ -33,10 +40,12 @@ def is_allowed_llm_url(url: str) -> bool:
 
 
 def load_llm_settings(environ: Mapping[str, str] = os.environ) -> LlmSettings:
-    """Read LLM_BASE_URL, LLM_MODEL and the optional LLM_API_KEY from the environment."""
+    """Read the LLM_* environment variables (see .env.example)."""
     base_url = environ.get("LLM_BASE_URL", "").strip().rstrip("/")
     model = environ.get("LLM_MODEL", "").strip()
     api_key = environ.get("LLM_API_KEY", "").strip() or None
+    reasoning_effort = environ.get("LLM_REASONING_EFFORT", "").strip() or None
+    raw_timeout = environ.get("LLM_REQUEST_TIMEOUT", "").strip()
 
     missing = [name for name, value in (("LLM_BASE_URL", base_url), ("LLM_MODEL", model)) if not value]
     if missing:
@@ -44,4 +53,21 @@ def load_llm_settings(environ: Mapping[str, str] = os.environ) -> LlmSettings:
     if not is_allowed_llm_url(base_url):
         raise ValueError(f"LLM_BASE_URL must use https, or http on localhost only: {base_url!r}")
 
-    return LlmSettings(base_url=base_url, model=model, api_key=api_key)
+    return LlmSettings(
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        reasoning_effort=reasoning_effort,
+        request_timeout=parse_timeout(raw_timeout) if raw_timeout else DEFAULT_REQUEST_TIMEOUT,
+    )
+
+
+def parse_timeout(value: str) -> float:
+    """A strictly positive number of seconds, e.g. "30" or "2.5"."""
+    try:
+        timeout = float(value)
+    except ValueError:
+        raise ValueError(f"LLM_REQUEST_TIMEOUT must be a number of seconds, got {value!r}") from None
+    if not 0 < timeout < float("inf"):  # Also rejects "nan" and "inf".
+        raise ValueError(f"LLM_REQUEST_TIMEOUT must be a positive number of seconds, got {value!r}")
+    return timeout
