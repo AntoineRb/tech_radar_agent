@@ -338,6 +338,30 @@ def test_article_message_content_is_truncated_at_a_word():
     assert content.endswith("word")  # Not "wo".
 
 
+def test_article_message_accepts_a_longer_content_limit():
+    long_content = ("word " * 500).strip()  # 2,499 characters.
+    article = make_article(content=long_content)
+
+    content = build_article_message(article, content_chars=3000).split("content: ")[1].split("\n")[0]
+    assert content == long_content  # Sent in full.
+
+    assert len(field(article, "content")) <= SCORING_CONTENT_CHARS  # Default unchanged: scoring still gets 1,000.
+
+
+def test_article_message_content_limit_is_keyword_only():
+    # build_article_message(article, 3000) would be ambiguous: the name must be written.
+    with pytest.raises(TypeError):
+        build_article_message(make_article(), 3000)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("limit", [600, 2000])
+def test_article_message_longer_limit_still_cuts_at_a_word(limit):
+    content = build_article_message(make_article(content="word " * 600), content_chars=limit)
+    sent = content.split("content: ")[1].split("\n")[0]
+    assert len(sent) <= limit
+    assert sent.endswith("word")
+
+
 @pytest.mark.parametrize(
     "extra",
     [

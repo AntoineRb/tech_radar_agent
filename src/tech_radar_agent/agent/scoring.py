@@ -152,12 +152,18 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 # --- User message: the article (untrusted) ---
 
 
-def build_article_message(article: Article) -> str:
+def build_article_message(article: Article, *, content_chars: int = SCORING_CONTENT_CHARS) -> str:
     """Build the user message: the article alone, between delimiters, as `key: value` lines.
 
-    Only what helps judge relevance is sent (decision 2/5): no author or dates, and no popularity
-    (HN points, GitHub stars), which the LLM would mistake for relevance. Every value is cleaned
-    again here, even fields already cleaned at collection time, and `extra` was never cleaned.
+    Only what helps judge relevance is sent: no author or dates, and no popularity (HN points,
+    GitHub stars), which the LLM would mistake for relevance. Every value is cleaned again here,
+    even fields already cleaned at collection time, and `extra` was never cleaned.
+
+    Args:
+        article: the article to present to the LLM.
+        content_chars: how much content to send, cut at the end of a word. SCORING_CONTENT_CHARS
+            (1,000) for scoring; summaries need more. Content is already capped at 3,000 characters
+            at collection time, so a higher value changes nothing.
 
     Example:
         <article>
@@ -169,7 +175,7 @@ def build_article_message(article: Article) -> str:
         </article>
     """
     # Truncated before cleaning, so that the cut falls at the end of a word.
-    content = _truncate_at_word(article.content, SCORING_CONTENT_CHARS) if article.content else None
+    content = _truncate_at_word(article.content, content_chars) if article.content else None
     tags = _collect_tags(article.extra)
 
     # A list, not a set: the line order must be the same for every article.
@@ -178,7 +184,7 @@ def build_article_message(article: Article) -> str:
         ("domain", _clean_field(_domain(article.url), MAX_FIELD_CHARS)),
         ("title", _clean_field(article.title, MAX_TITLE_CHARS)),
         ("tags", ", ".join(tags) or None),
-        ("content", _clean_field(content, SCORING_CONTENT_CHARS)),
+        ("content", _clean_field(content, content_chars)),
     ]
 
     lines = [ARTICLE_OPEN]
