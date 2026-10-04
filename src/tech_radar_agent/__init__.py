@@ -39,7 +39,7 @@ def main() -> int:
 
 def build_collectors() -> list[Collector]:
     """Create one collector per configured source, checking that source names are unique."""
-    collectors = [build_collector(source) for source in load_config()["sources"]]
+    collectors = [build_collector(source) for source in load_config().sources]
     duplicates = [name for name, count in Counter(c.name for c in collectors).items() if count > 1]
     if duplicates:
         raise ValueError(f"Duplicate source names {duplicates}: give each source a distinct `name`")

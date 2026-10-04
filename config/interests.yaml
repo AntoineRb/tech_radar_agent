@@ -1,5 +1,5 @@
 # Interest profile used by the LLM to score each collected article.
-# Topics are free text: the LLM matches meaning, not exact keywords,
+# Descriptions are free text: the LLM matches meaning, not exact keywords,
 # so "AI agents" also covers "agentic workflows" or "tool-using LLMs".
 
 profile:
@@ -8,20 +8,27 @@ profile:
     Software developer. Building AI agents from scratch in Python and following
     the tech industry closely. Interested in hands-on, technical content over hype.
 
-  # Topics by priority. The scoring prompt can weigh them differently.
+  # Language of the text you read in the digest (summaries), as a plain name. Default: English.
+  language: French
+
+  # Topics by priority, as `id: description`.
+  # - id: short and stable (lowercase, digits, dashes). The LLM returns it for each matching article
+  #   and it is stored in the database: renaming it breaks the link with past articles.
+  # - description: what the LLM reads. Reword it freely.
+  # Remove a line to stop tagging new articles with it. Keep the list short (~10-15).
   interests:
     high:
-      - AI agents (architecture, tool use, memory, evaluation)
-      - Large language models (new models, benchmarks, prompting, fine-tuning)
-      - Python (language, tooling, notable libraries)
+      ai-agents: AI agents (architecture, tool use, memory, evaluation)
+      llm: Large language models (new models, benchmarks, prompting, fine-tuning)
+      python: Python (language, tooling, notable libraries)
     medium:
-      - JavaScript and TypeScript (language, runtimes, frameworks)
-      - Apple (platforms, developer tools, hardware)
-      - Nvidia (GPUs, AI hardware, CUDA)
-      - Microsoft (developer tools, AI products, open source)
+      javascript: JavaScript and TypeScript (language, runtimes, frameworks)
+      apple: Apple (platforms, developer tools, hardware)
+      nvidia: Nvidia (GPUs, AI hardware, CUDA)
+      microsoft: Microsoft (developer tools, AI products, open source)
     low:
-      - Developer productivity and tooling
-      - Open source projects gaining traction
+      dev-tooling: Developer productivity and tooling
+      open-source: Open source projects gaining traction
 
   # Topics to push down, even if they match an interest above.
   not_interested:

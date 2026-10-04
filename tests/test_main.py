@@ -39,8 +39,12 @@ def workspace(tmp_path, monkeypatch, caplog):
     monkeypatch.setitem(COLLECTOR_TYPES, "fake", FakeCollector)
 
 
-def run(config: str) -> int:
-    Path("config/interests.yaml").write_text(config, encoding="utf-8")
+PROFILE = "profile:\n  about: Test user\n  interests:\n    high:\n      python: Python\n"
+
+
+def run(sources: str, profile: str = PROFILE) -> int:
+    """Write a config made of a valid profile (unless given) and `sources`, then run main()."""
+    Path("config/interests.yaml").write_text(profile + sources, encoding="utf-8")
     return main()
 
 
@@ -91,7 +95,7 @@ def test_source_with_no_articles_is_not_a_failure():
         pytest.param("sources:\n  - {type: fake}\n  - {type: fake}\n", id="duplicate-names"),
         pytest.param("sources:\n  - {type: twitter}\n", id="unknown-type"),
         pytest.param("sources:\n  - {type: fake, countt: 3}\n", id="misspelled-option"),
-        pytest.param("profile: {}\n", id="no-sources"),
+        pytest.param("", id="no-sources"),
         pytest.param("sources: [unclosed\n", id="invalid-yaml"),
         pytest.param("sources: !!python/object/apply:os.system ['echo PWNED']\n", id="unsafe-yaml"),
     ],
@@ -100,6 +104,12 @@ def test_config_errors_stop_before_collecting(config, caplog):
     assert run(config) == EXIT_CONFIG_ERROR
     assert "Invalid configuration" in caplog.text
     assert not DB_PATH.parent.exists()  # Stopped before opening the database.
+
+
+def test_invalid_profile_stops_before_collecting(caplog):
+    assert run("sources:\n  - {type: fake}\n", profile="profile:\n  about: Me\n") == EXIT_CONFIG_ERROR
+    assert "profile.interests" in caplog.text
+    assert not DB_PATH.parent.exists()
 
 
 def test_missing_config_file():

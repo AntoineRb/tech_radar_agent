@@ -31,6 +31,10 @@ Message = dict[str, str]
 # Body fields managed by the client: a caller cannot override them through `options`.
 _RESERVED_KEYS = frozenset({"model", "messages"})
 
+# Security rule: the LLM gets no tools (docs/security.md). It can only return text, which this
+# program treats as data. These request fields would let the model ask us to run something.
+_FORBIDDEN_KEYS = frozenset({"tools", "tool_choice", "parallel_tool_calls", "functions", "function_call"})
+
 # Thinking block that some models write into their answer (compiled once).
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", flags=re.DOTALL)
 
@@ -119,7 +123,11 @@ class LlmClient:
         # --- 3. Extract the text: choices[0].message.content ---
         try:
             choice = data["choices"][0]
-            content = choice["message"]["content"]
+            message = choice["message"]
+            # Never sent tools, so a tool call can only mean a misbehaving server or model: refuse it.
+            if message.get("tool_calls") or message.get("function_call"):
+                raise LlmError("LLM answered with a tool call, but no tools are allowed")
+            content = message["content"]
             # Why the model stopped: "stop" (normal end), "length" (max_tokens reached)...
             finish_reason = choice.get("finish_reason")
         # KeyError: a key is missing; IndexError: "choices" is empty;
@@ -159,6 +167,9 @@ class LlmClient:
 
     def _build_body(self, messages: list[Message], options: dict[str, Any]) -> dict[str, Any]:
         """Assemble the JSON request body: model + messages + reasoning_effort + options."""
+        forbidden = _FORBIDDEN_KEYS & options.keys()
+        if forbidden:
+            raise TypeError(f"Tools are not allowed: the LLM must not be able to trigger actions {sorted(forbidden)}")
         conflicts = _RESERVED_KEYS & options.keys()
         if conflicts:
             raise TypeError(f"Reserved options, managed by the client: {sorted(conflicts)}")

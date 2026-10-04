@@ -56,6 +56,7 @@ Last audit on 2026-09-29, after adding pytest: `pip-audit` found no known vulner
 - **LLM endpoint**: HTTPS, with one exception: plain `http` is allowed only towards this machine (`localhost`, `127.0.0.1`, `::1`) for a local model such as Ollama. `is_allowed_llm_url()` in `llm/settings.py` enforces this, and a look-alike host (`localhost.evil.com`) or a LAN address is refused. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
 - Keep secrets (LLM API key, SMTP, webhook) in environment variables or GitHub secrets: a git-ignored `.env` locally, documented by `.env.example`, which never contains a real value. Never put secrets in code, config files or logs. `LlmSettings` hides the API key from `repr()`.
 - Load YAML with `yaml.safe_load`, never `yaml.load`.
+- **Local Ollama**: keep it listening on `127.0.0.1` only, which is the default (leave `OLLAMA_HOST` unset). Exposed on the network, anyone on the LAN could use the model and its API (pull or delete models). Check with `lsof -nP -iTCP:11434 -sTCP:LISTEN`.
 
 ## 3. Prompt injection
 
@@ -80,7 +81,11 @@ Collected content is **data to evaluate, never instructions to follow**. There i
 - Put the article in a clearly delimited block (for example `<article>…</article>`). Remove any delimiter that appears inside the content.
 - The system prompt says that the block is untrusted data and that any instruction inside it must be ignored.
 - Ask for structured output (JSON) and validate it: `score` must be an integer from 0 to 10, and `summary` has a maximum length. If the output is invalid, reject the article. Never guess or fix the output.
-- The scoring and summary LLM has **no tools and no side effects**. It only returns text.
+- The scoring and summary LLM has **no tools and no side effects**. It only returns text. This is enforced by `LlmClient`, not left to convention:
+  - `chat()` refuses `tools`, `tool_choice`, `parallel_tool_calls`, `functions` and `function_call` options (`TypeError`, nothing is sent);
+  - an answer containing a tool call is rejected (`LlmError`);
+  - the program never evaluates, executes or shells out what the LLM returns (no `eval`, `exec`, `subprocess`, `pickle` in `src/`, and SQL is always parameterized). LLM output is parsed as JSON and validated, nothing more.
+- A model's "tools" capability (as listed by `ollama show`) only means it *can ask* for a tool when the request offers one. Neither the model nor Ollama runs anything by itself.
 
 ### At delivery
 
@@ -97,6 +102,7 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 - `collectors/test_rss.py::TestSecurity`: XXE with both of feedparser's parsers, `<script>`, `javascript:` and `data:` links.
 - `test_config.py`: `yaml.safe_load` refuses to build Python objects.
 - `collectors/test_github.py::TestAuthentication`: the token comes only from the environment.
+- `llm/test_client.py`: tools can never be offered, tool-call answers are refused, the key never reaches logs.
 - `llm/test_settings.py`: http only towards localhost (look-alike hosts refused), API key hidden from `repr()`, no real key in `.env.example`.
 
 ## Status
@@ -109,6 +115,8 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 | No XML external entities (XXE) in feeds | ✅ Disabled by `feedparser`, checked with a crafted feed |
 | GitHub token from the environment only | ✅ `collectors/github.py` (optional `GITHUB_TOKEN`) |
 | LLM endpoint: HTTPS, or http to localhost only; API key from the environment, hidden in logs | ✅ `llm/settings.py` |
+| No tools for the LLM: tool options refused, tool-call answers rejected | ✅ `llm/client.py` |
+| No code execution from external or LLM data (`eval`, `exec`, `subprocess`, `pickle`, raw SQL) | ✅ checked on 2026-10-04 |
 | Maximum response size (5 MB, counted after decompression) | ✅ `collectors/base.py`: `fetch()` |
 | Invisible character stripping, NFKC normalization, truncation | ✅ `sanitize.py`, enforced by `Article` |
 | URL scheme validation (`http`/`https` with a host) | ✅ `sanitize.py`, enforced by `Article` |
