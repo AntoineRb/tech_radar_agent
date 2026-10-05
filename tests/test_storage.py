@@ -5,7 +5,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tech_radar_agent.models import Article
-from tech_radar_agent.storage import connect, fetch_articles_to_score, save_articles, save_score, save_summary
+from tech_radar_agent.storage import (
+    best_recent_score,
+    connect,
+    fetch_articles_to_score,
+    fetch_digest_candidates,
+    mark_sent,
+    save_articles,
+    save_score,
+    save_summary,
+)
 
 
 @pytest.fixture
@@ -104,6 +113,7 @@ def test_llm_columns_start_empty(conn):
     row = rows(conn)[0]
     assert row["score"] is None
     assert row["summary"] is None
+    assert row["sent_at"] is None
 
 
 def test_extra_values_that_are_not_json_are_stored_as_text(conn):
@@ -128,7 +138,7 @@ def columns(conn) -> list[str]:
 
 
 def test_new_database_has_every_column(conn):
-    assert {"reason", "interests", "scored_at", "scored_with"} <= set(columns(conn))
+    assert {"reason", "interests", "scored_at", "scored_with", "sent_at"} <= set(columns(conn))
 
 
 def test_old_database_is_upgraded_without_losing_articles(tmp_path, caplog):
@@ -144,8 +154,9 @@ def test_old_database_is_upgraded_without_losing_articles(tmp_path, caplog):
 
     with caplog.at_level("INFO"):
         upgraded = connect(db_path)
-    assert {"reason", "interests", "scored_at", "scored_with"} <= set(columns(upgraded))
+    assert {"reason", "interests", "scored_at", "scored_with", "sent_at"} <= set(columns(upgraded))
     assert rows(upgraded)[0]["title"] == "Kept"
+    assert rows(upgraded)[0]["sent_at"] is None
     assert "added column `reason`" in caplog.text
     upgraded.close()
 
@@ -274,5 +285,160 @@ def test_saves_are_committed_immediately(tmp_path):
     save_score(writer, article_id, score=8, reason="x", interests=[], scored_with="m")
     reader = sqlite3.connect(db_path)  # Another connection sees it without writer.commit().
     assert reader.execute("SELECT score FROM articles").fetchone()[0] == 8
+    reader.close()
+    writer.close()
+
+
+
+# --- Digest: fetch_digest_candidates, best_recent_score, mark_sent ---
+
+
+def scored(conn, url: str, score: int, days_ago: float = 1, summary: str | None = None, **fields) -> int:
+    """Store a recent article with a score (and a summary if given). Return its id."""
+    article_id = add(conn, url, published_at=published(days_ago), **fields)
+    save_score(conn, article_id, score=score, reason=f"Reason {score}.", interests=["python"], scored_with="m")
+    if summary is not None:
+        save_summary(conn, article_id, summary)
+    return article_id
+
+
+def candidates(conn, min_score=8, max_age_days=3) -> list[str]:
+    return [c.article.url for c in fetch_digest_candidates(conn, min_score, max_age_days, now=NOW)]
+
+
+def test_candidates_are_scored_at_least_min_score(conn):
+    scored(conn, "https://example.com/seven", 7)
+    scored(conn, "https://example.com/eight", 8)  # Equal to the threshold: included.
+    scored(conn, "https://example.com/ten", 10)
+    add(conn, "https://example.com/unscored", published_at=published(1))
+    assert candidates(conn) == ["https://example.com/ten", "https://example.com/eight"]
+
+
+def test_candidates_best_score_first_then_oldest_first(conn):
+    scored(conn, "https://example.com/8-new", 8, days_ago=0.1)
+    scored(conn, "https://example.com/9", 9, days_ago=1)
+    scored(conn, "https://example.com/8-old", 8, days_ago=2.5)  # Leaves the window soonest.
+    scored(conn, "https://example.com/8-mid", 8, days_ago=1.5)
+    assert candidates(conn) == [
+        "https://example.com/9",
+        "https://example.com/8-old",
+        "https://example.com/8-mid",
+        "https://example.com/8-new",
+    ]
+
+
+def test_candidates_keep_insertion_order_on_full_ties(conn):
+    first = scored(conn, "https://example.com/a", 8, days_ago=1)
+    second = scored(conn, "https://example.com/b", 8, days_ago=1)
+    assert [c.id for c in fetch_digest_candidates(conn, 8, 3, now=NOW)] == [first, second]
+
+
+def test_candidates_respect_the_age_window(conn):
+    scored(conn, "https://example.com/recent", 9, days_ago=2)
+    scored(conn, "https://example.com/old", 10, days_ago=4)
+    scored(conn, "https://example.com/no-date", 9, days_ago=0)
+    with conn:  # No publication date: the collection date counts, like for scoring.
+        conn.execute("UPDATE articles SET published_at = NULL, fetched_at = ? WHERE url LIKE '%no-date'",
+                     (published(5).isoformat(),))
+    assert candidates(conn) == ["https://example.com/recent"]
+
+
+def test_candidates_skip_sent_articles(conn):
+    sent = scored(conn, "https://example.com/sent", 10)
+    scored(conn, "https://example.com/new", 8)
+    mark_sent(conn, [sent], sent_at=NOW)
+    assert candidates(conn) == ["https://example.com/new"]
+
+
+def test_candidates_carry_the_llm_results(conn):
+    article_id = add(conn, "https://example.com/a", published_at=published(1), content="Text", source="rss")
+    save_score(conn, article_id, score=9, reason="Very relevant.", interests=["ai-agents", "python"], scored_with="m")
+    save_summary(conn, article_id, "What it brings.")
+    [candidate] = fetch_digest_candidates(conn, 8, 3, now=NOW)
+    assert candidate.id == article_id
+    assert (candidate.score, candidate.reason, candidate.summary) == (9, "Very relevant.", "What it brings.")
+    assert candidate.interests == ("ai-agents", "python")
+    assert (candidate.article.url, candidate.article.source, candidate.article.content) == (
+        "https://example.com/a", "rss", "Text",
+    )
+
+
+def test_candidates_without_summary_are_included(conn):
+    scored(conn, "https://example.com/link-only", 9, summary=None)
+    [candidate] = fetch_digest_candidates(conn, 8, 3, now=NOW)
+    assert candidate.summary is None
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "url = 'javascript:alert(1)'",  # No longer passes Article's URL check.
+        "interests = 'not json'",
+        "interests = '{\"python\": 1}'",  # JSON, but not a list.
+        "interests = '[1, 2]'",  # A list, but not of ids.
+        "reason = NULL",
+    ],
+)
+def test_candidates_skip_rows_that_are_no_longer_valid(conn, caplog, corruption):
+    scored(conn, "https://example.com/good", 8)
+    bad_id = scored(conn, "https://example.com/bad", 9)
+    with conn:  # Simulate a row corrupted outside the agent. The SQL is fixed test text, not input.
+        conn.execute(f"UPDATE articles SET {corruption} WHERE id = ?", (bad_id,))
+    assert candidates(conn) == ["https://example.com/good"]
+    assert f"Skipping stored article {bad_id}" in caplog.text
+
+
+def test_candidates_without_now_use_the_current_time(conn):
+    article_id = add(conn, "https://example.com/a", published_at=datetime.now(timezone.utc))
+    save_score(conn, article_id, score=9, reason="x", interests=[], scored_with="m")
+    assert len(fetch_digest_candidates(conn, 8, 3)) == 1
+
+
+def test_best_recent_score(conn):
+    assert best_recent_score(conn, 3, now=NOW) is None  # Nothing scored.
+    add(conn, "https://example.com/unscored", published_at=published(1))
+    assert best_recent_score(conn, 3, now=NOW) is None
+    scored(conn, "https://example.com/six", 6)
+    scored(conn, "https://example.com/seven", 7)
+    assert best_recent_score(conn, 3, now=NOW) == 7
+
+
+def test_best_recent_score_ignores_sent_and_old_articles(conn):
+    scored(conn, "https://example.com/five", 5)
+    mark_sent(conn, [scored(conn, "https://example.com/sent", 10)], sent_at=NOW)
+    scored(conn, "https://example.com/old", 9, days_ago=10)
+    assert best_recent_score(conn, 3, now=NOW) == 5
+
+
+def test_mark_sent_only_marks_the_given_articles(conn):
+    first = scored(conn, "https://example.com/a", 9)
+    second = scored(conn, "https://example.com/b", 9)
+    third = scored(conn, "https://example.com/c", 9)
+    mark_sent(conn, [first, third], sent_at=NOW)
+    sent = {row["id"]: row["sent_at"] for row in rows(conn)}
+    assert datetime.fromisoformat(sent[first]) == NOW
+    assert datetime.fromisoformat(sent[third]) == NOW
+    assert sent[second] is None
+
+
+def test_mark_sent_defaults_to_now_in_utc(conn):
+    article_id = scored(conn, "https://example.com/a", 9)
+    mark_sent(conn, [article_id])
+    assert datetime.fromisoformat(rows(conn)[0]["sent_at"]).tzinfo == timezone.utc
+
+
+def test_mark_sent_with_no_article_does_nothing(conn):
+    scored(conn, "https://example.com/a", 9)
+    mark_sent(conn, [])
+    assert rows(conn)[0]["sent_at"] is None
+
+
+def test_mark_sent_is_committed_immediately(tmp_path):
+    db_path = tmp_path / "test.db"
+    writer = connect(db_path)
+    article_id = scored(writer, "https://example.com/a", 9)
+    mark_sent(writer, [article_id], sent_at=NOW)
+    reader = sqlite3.connect(db_path)
+    assert reader.execute("SELECT sent_at FROM articles").fetchone()[0] is not None
     reader.close()
     writer.close()

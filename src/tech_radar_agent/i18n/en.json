@@ -1,0 +1,18 @@
+{
+  "language_names": ["English"],
+  "header": "Tech Radar · $date",
+  "article_count_one": "$count article · about $minutes min to scan",
+  "article_count_other": "$count articles · about $minutes min to scan",
+  "to_read": "TO READ",
+  "also_worth_a_look": "ALSO WORTH A LOOK",
+  "why": "Why:",
+  "discussion": "Discussion",
+  "empty_report": "Nothing scored $threshold or more today: $collected new articles, $scored scored, best score $best.",
+  "empty_report_nothing_scored": "Nothing scored today: $collected new articles collected.",
+  "date": "$weekday $day $month",
+  "weekdays": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+  "months": [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ]
+}

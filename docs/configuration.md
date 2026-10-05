@@ -30,7 +30,7 @@ profile:
 | Key | Required | Meaning |
 |---|---|---|
 | `about` | yes | Free text that gives the LLM some context. `>` joins the lines into one paragraph |
-| `language` | no (default `English`) | Language of the text you read in the digest, as a plain name (`French`, not `fr`). Prompt instructions stay in English |
+| `language` | no (default `English`) | Language of the text you read in the digest, as a plain name (`French`, not `fr`). Prompt instructions stay in English. The LLM writes reasons and summaries in it; the digest's fixed labels follow when a translation file exists (see below), otherwise they are in English |
 | `interests.high` / `medium` / `low` | at least one interest | Topics by priority, as `id: description` (see below). Empty priorities are allowed |
 | `not_interested` | no | Topics that should lower the score, even if they match an interest |
 
@@ -46,6 +46,17 @@ Tips:
 - Be specific. "Apple (platforms, developer tools, hardware)" gives better results than "Apple", which would also match earnings and rumors.
 - The exclusion list matters as much as the interests: it is what keeps the digest short.
 - Keep the list short (about 10 to 15 interests, checked by a test). A long list makes the prompt longer and the model less focused.
+
+### Digest labels in your language
+
+The digest's fixed labels (section titles, "Why:", the date) come from one file per language in [`src/tech_radar_agent/i18n/`](../src/tech_radar_agent/i18n/): English and French today. To add a language:
+
+1. Copy `en.json` to a new file named with the language code, for example `de.json`.
+2. Translate the values, for example by pasting the file into any LLM chat. Keep every key, and keep each `$placeholder` exactly as it is.
+3. List the names that select it in `language_names`, for example `["German", "Deutsch"]`.
+4. Run `uv run pytest tests/i18n`: the tests check that the file has every label, with the right placeholders, 7 weekdays and 12 months.
+
+A language without a file still works: content in that language, labels in English. See [ADR 0025](decisions/0025-digest-labels-in-language-files.md).
 
 ### `sources`: where articles come from
 
@@ -69,6 +80,21 @@ Rules:
 - Only official APIs and feeds published by the publisher itself, over HTTPS. Check a new feed before adding it (it responds, has recent posts, and is served from the publisher's domain), and note the check date in the file.
 - `limit` controls the volume of each source. Keep it low for noisy feeds such as arXiv.
 
+### `digest`: how much to read each day
+
+Optional. A missing section or key keeps its default.
+
+```yaml
+digest:
+  reading_time_minutes: 5   # whole minutes, 1 to 30. Default: 5
+  send_empty_report: true   # default: true
+```
+
+- `reading_time_minutes`: the time to **read the digest and decide what to open**, not to read the articles. The best articles go in first until this time is used; an article that does not fit is skipped and competes again the next day, and the digest always holds at least one entry when there is a candidate. See [ADR 0023](decisions/0023-digest-selection.md).
+- `send_empty_report`: on a day with no article to send, send a one-line activity report (articles collected, scored, best score) instead of nothing. Silence would not tell a quiet day from a broken run, and several days just under the threshold suggest the threshold is too high.
+
+Which articles are candidates (score threshold, age window) is set by the `AGENT_*` environment variables below, since it depends on the model.
+
 ### Validation
 
 The whole configuration is checked **before any network call**. The run stops with exit code `2` in these cases:
@@ -78,7 +104,8 @@ The whole configuration is checked **before any network call**. The run stops wi
 - a YAML tag tries to build a Python object;
 - `sources` is missing or empty;
 - a source has an unknown `type` or a misspelled option;
-- two sources have the same name.
+- two sources have the same name;
+- the `digest` section has an unknown key, a reading time that is not a whole number from 1 to 30, or a `send_empty_report` that is not `true` or `false`.
 
 ## Environment variables
 
@@ -99,6 +126,8 @@ In CI (GitHub Actions), they come from the repository secrets.
 | `LLM_REASONING_EFFORT` | no | Sent as `reasoning_effort` in every request. `none` turns off a model's thinking phase (qwen3.6 in Ollama: ~0.3 s instead of ~18 s per call). Leave it empty if the server rejects the field |
 | `LLM_REQUEST_TIMEOUT` | no | Seconds for one LLM call, default `30`. A local model's first call loads it into memory (~20 s) |
 | `GITHUB_TOKEN` | no | Higher GitHub search rate limit. Set automatically in GitHub Actions |
+| `TELEGRAM_BOT_TOKEN` | to send the digest | Bot token from [@BotFather](https://t.me/BotFather) (`/newbot`). Secret: it gives full control of the bot |
+| `TELEGRAM_CHAT_ID` | to send the digest | Your private chat id, a positive number. Send `/start` to your bot once, then read `message.chat.id` from `https://api.telegram.org/bot<TOKEN>/getUpdates`. Groups and channels (negative ids) are refused |
 | `AGENT_MAX_ARTICLE_AGE_DAYS` | no | Only articles published (or collected, when there is no date) in the last N days are scored. Default `3`, from 1 to 365 |
 | `AGENT_MAX_ARTICLES_PER_RUN` | no | At most this many articles are scored per run, newest first. Default `100`. A safety cap on time and cost |
 | `AGENT_SUMMARY_THRESHOLD` | no | Articles scored at least this (0-10) get a summary. Default `8`. Scores depend on the model: retune it when changing `LLM_MODEL` |

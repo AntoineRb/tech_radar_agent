@@ -20,7 +20,7 @@ The `tests/` folder mirrors `src/tech_radar_agent/`:
 tests/
 ├── conftest.py              # shared fixtures: no_network, fake_http
 ├── test_config.py           # load_config() + checks on the real config/interests.yaml
-├── test_main.py             # main(): collection then scoring (fake LLM server), failures, exit codes
+├── test_main.py             # main(): collection, scoring, digest (fake LLM and Telegram servers), --dry-run, --preview, exit codes
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary
@@ -28,7 +28,13 @@ tests/
 │   ├── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
 │   ├── test_summary.py      # parse_summary (links, HTML, false positives, hidden links), summary prompt, Summarizer
 │   ├── test_loop.py         # call_with_retry, score_and_summarize: thresholds, retries, stops, report counts
+│   ├── test_digest.py       # reading_seconds, select_entries: costs, budget rules, selection properties
+│   ├── test_render.py       # Telegram HTML: layout, both languages, hostile text in every field, complete blocks
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
+├── delivery/
+│   └── test_telegram.py     # fake Telegram server: packing, errors, retries, partial sending, token never leaked
+├── i18n/
+│   └── test_labels.py       # every language file against the label contract, language lookup, English fallback, placeholder safety
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
 │   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
