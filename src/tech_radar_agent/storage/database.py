@@ -31,8 +31,7 @@ CREATE TABLE IF NOT EXISTS articles (
     reason         TEXT,
     interests      TEXT,
     scored_at      TEXT,
-    scored_with    TEXT,
-    sent_at        TEXT
+    scored_with    TEXT
 )
 """
 
@@ -43,7 +42,6 @@ ADDED_COLUMNS = {
     "interests": "TEXT",  # JSON list of profile interest ids.
     "scored_at": "TEXT",  # When the article was scored (ISO 8601, UTC).
     "scored_with": "TEXT",  # The model that scored it: scores depend on the model.
-    "sent_at": "TEXT",  # When the article went out in a digest (ISO 8601, UTC). NULL: not sent yet.
 }
 
 
@@ -53,18 +51,6 @@ class StoredArticle:
 
     id: int
     article: Article
-
-
-@dataclass(frozen=True)
-class DigestCandidate:
-    """A scored article that may go into a digest: the article and what the LLM said about it."""
-
-    id: int
-    article: Article
-    score: int
-    reason: str
-    interests: tuple[str, ...]  # Profile interest ids, possibly empty.
-    summary: str | None  # None: too little text to summarize, or the summary failed.
 
 
 def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
@@ -196,80 +182,3 @@ def save_summary(conn: sqlite3.Connection, article_id: int, summary: str) -> Non
     """Store the summary of one article. Committed right away."""
     with conn:
         conn.execute("UPDATE articles SET summary = ? WHERE id = ?", (summary, article_id))
-
-
-def fetch_digest_candidates(
-    conn: sqlite3.Connection,
-    min_score: int,
-    max_age_days: int,
-    now: datetime | None = None,
-) -> list[DigestCandidate]:
-    """Articles that may go into the next digest, in selection order.
-
-    Scored at least `min_score`, not sent yet, and recent enough (same age rule as
-    fetch_articles_to_score). Best score first; on equal scores, the OLDEST first: it leaves the age
-    window sooner, so it gets its chance before newer articles that can still wait.
-    Articles left out of a digest stay unsent, so they compete again for the next one.
-    """
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=max_age_days)
-    rows = conn.execute(
-        """
-        SELECT id, source, title, url, author, content, published_at, fetched_at, extra,
-               score, reason, interests, summary
-        FROM articles
-        WHERE score >= ? AND sent_at IS NULL AND coalesce(published_at, fetched_at) >= ?
-        ORDER BY score DESC, coalesce(published_at, fetched_at) ASC, id ASC
-        """,
-        (min_score, cutoff.isoformat()),
-    ).fetchall()
-
-    candidates = []
-    for row in rows:
-        try:
-            candidates.append(_to_candidate(row))
-        except (ValueError, TypeError) as error:  # A row that no longer passes the checks.
-            logger.warning("Skipping stored article %s (%s)", row["id"], error)
-    return candidates
-
-
-def _to_candidate(row: sqlite3.Row) -> DigestCandidate:
-    interests = json.loads(row["interests"] or "[]")
-    if not isinstance(interests, list) or not all(isinstance(item, str) for item in interests):
-        raise ValueError("interests is not a list of ids")
-    if not isinstance(row["reason"], str):
-        raise ValueError("reason is missing")
-    return DigestCandidate(
-        id=row["id"],
-        article=_to_article(row),
-        score=row["score"],
-        reason=row["reason"],
-        interests=tuple(interests),
-        summary=row["summary"],
-    )
-
-
-def best_recent_score(conn: sqlite3.Connection, max_age_days: int, now: datetime | None = None) -> int | None:
-    """The highest score among recent articles not sent yet, or None if none is scored.
-
-    Shown in the report of a day with no digest candidate: days in a row just under the threshold
-    hint that the threshold is too high for the model.
-    """
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=max_age_days)
-    row = conn.execute(
-        "SELECT max(score) FROM articles WHERE sent_at IS NULL AND coalesce(published_at, fetched_at) >= ?",
-        (cutoff.isoformat(),),
-    ).fetchone()
-    return row[0]
-
-
-def mark_sent(conn: sqlite3.Connection, article_ids: Iterable[int], sent_at: datetime | None = None) -> None:
-    """Record that these articles went out in a digest, so they are never sent again.
-
-    One transaction: either every article of the digest is marked, or none is. Call it only once
-    the digest was actually delivered.
-    """
-    when = (sent_at or datetime.now(timezone.utc)).isoformat()
-    with conn:
-        conn.executemany(
-            "UPDATE articles SET sent_at = ? WHERE id = ?", [(when, article_id) for article_id in article_ids]
-        )
