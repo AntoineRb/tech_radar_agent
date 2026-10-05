@@ -80,9 +80,13 @@ class LoopReport:
     def remaining(self) -> int:
         """Articles left unscored by an early stop.
 
-        The articles never reached, plus the one the loop stopped on. Whether the stop happened while
-        scoring or while summarizing it, nothing is saved for that article: it stays unscored and is
-        processed again, from scratch, at the next run.
+        The articles never reached, plus the one the loop stopped on after a fatal error or a
+        temporary error that outlasted the retries. Whether that stop happened while scoring or while
+        summarizing it, nothing is saved for that article: it stays unscored and is processed again,
+        from scratch, at the next run.
+
+        A stop after MAX_CONSECUTIVE_FAILURES scoring failures is different: the last failed article
+        is already counted in `score_failed`, so only the articles never reached are remaining.
         """
         return self.total - self.scored - self.score_failed
 
@@ -93,31 +97,38 @@ class LoopReport:
 
 
 def call_with_retry(call: Callable[[], T], *, sleep: Callable[[float], None] = time.sleep) -> T:
-    """Appelle `call()`, en réessayant sur LlmTemporaryError. Renvoie son résultat.
+    """Call `call`, retrying only on temporary LLM errors.
 
-    Entrées :
-        call  : une fonction SANS argument qui fait l'appel au LLM,
-                ex. `lambda: scorer.score(article)` (rappel lambda : voir plus bas).
-        sleep : la fonction d'attente. time.sleep en vrai ; dans les tests, une fausse fonction qui
-                note les durées sans attendre (sinon chaque test durerait 10 s).
-    Lève :
-        La dernière LlmTemporaryError si toutes les tentatives échouent.
-        Toute AUTRE exception (LlmFatalError, LlmError de base…) tout de suite, sans réessayer.
+    The call is tried once, then once more after each delay in RETRY_DELAYS.
+    A server-provided `retry_after` replaces the default delay, capped at
+    MAX_RETRY_AFTER because the server is not a trustworthy source.
 
-    TODO :
-    1. Au plus 1 + len(RETRY_DELAYS) tentatives.
-    2. Sur LlmTemporaryError : attendre error.retry_after s'il est donné (plafonné à MAX_RETRY_AFTER),
-       sinon le délai de RETRY_DELAYS correspondant ; logger un avertissement (quelle tentative, combien
-       de secondes) ; recommencer.
-    3. Pas d'attente après la dernière tentative : on relève l'erreur directement.
-    Piège : LlmTemporaryError est une sous-classe de LlmError. Ici on n'attrape QUE la temporaire.
+    Args:
+        call: A function with no argument, typically a lambda.
+        sleep: Injected so tests can record waits instead of sleeping.
 
-    Rappel lambda (exemple hors projet) :
-        def twice(f): return f() + f()
-        twice(lambda: 21)                 # 42 ; la lambda « emballe » un appel pour le faire plus tard
-        twice(lambda: len("abc"))         # 6
+    Returns:
+        Whatever `call` returns.
+
+    Raises:
+        LlmTemporaryError: If every attempt failed (the last error is raised).
+        Exception: Any other exception from `call`, immediately, without retry.
     """
-    raise NotImplementedError
+    attempts = len(RETRY_DELAYS) + 1
+    for attempt, default_delay in enumerate(RETRY_DELAYS, start=1):
+        try:
+            return call()
+        except LlmTemporaryError as error:
+            if error.retry_after is not None:
+                delay = min(error.retry_after, MAX_RETRY_AFTER)
+            else:
+                delay = default_delay
+            logger.warning(
+                "Temporary LLM error on attempt %d/%d (%s), retrying in %.1f s", attempt, attempts, error, delay
+            )
+            sleep(delay)
+    # Last attempt, outside the try: if it fails, its error propagates as is.
+    return call()
 
 
 # ---------------------------------------------------------------------------------------------
