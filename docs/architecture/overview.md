@@ -28,7 +28,9 @@ flowchart LR
 | Digest: selection within a reading-time budget | ✅ Done | `agent/digest.py` ([details](digest.md)) |
 | Digest: labels in the reader's language | ✅ Done | `i18n/` ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)) |
 | Digest: rendering in Telegram HTML | ✅ Done | `agent/render.py` ([details](digest.md#rendering-in-telegram-html)) |
-| Digest: delivery on Telegram, wiring, daily schedule | 🔜 Next | — |
+| Digest: delivery on Telegram | ✅ Done | `delivery/telegram.py` ([details](digest.md#delivery-on-telegram)) |
+| Digest: wired into `main()`, `--dry-run`, `--preview`, exit code 4 | ✅ Done | `__init__.py` ([ADR 0027](../decisions/0027-digest-in-the-run-dry-run-and-preview.md)) |
+| Daily run on GitHub Actions | 🔜 Next | — |
 | Feedback | Planned | — |
 
 ## Code layout
@@ -48,6 +50,8 @@ src/tech_radar_agent/
 │   ├── digest.py    # select_entries: the digest entries that fit in the reading-time budget
 │   ├── render.py    # render_digest: Telegram HTML blocks, everything escaped
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
+├── delivery/
+│   └── telegram.py  # Telegram Bot API: settings, packing, sending, the token never leaks
 ├── i18n/
 │   ├── __init__.py  # load_labels: the digest's fixed labels in the reader's language, English fallback
 │   ├── en.json      # the default language, and the file to copy to translate
@@ -79,6 +83,9 @@ data/                  # local SQLite database (git-ignored, kept with .gitkeep)
 4. Logs a summary: articles collected, new articles, failed sources.
 5. Reads the `LLM_*` and `AGENT_*` settings, then runs the [agent loop](agent-loop.md): scores the recent unscored articles, summarizes those at or above the threshold, and saves each result at once. Invalid settings skip this step; the collection is already saved.
 6. Logs a summary: articles scored, summarized, failed, and how many are left after an early stop.
+7. Builds the [digest](digest.md): selects the best unsent articles that fit in the reading-time budget, renders them in Telegram HTML, sends them, and marks the articles of each message Telegram confirmed. A day with no candidate gets a one-line report. This runs even if scoring stopped.
+
+`--dry-run` does all of this but sends nothing and marks nothing: the digest is written to `output/digest-YYYY-MM-DD.html`. `--preview` only builds the digest from the database (no collection, no LLM call) and writes the same file. See [ADR 0027](../decisions/0027-digest-in-the-run-dry-run-and-preview.md).
 
 A source that raises is logged with its traceback and skipped, and the other sources keep running. An LLM failure is handled by the loop: skip the article, retry, or stop scoring.
 
@@ -88,6 +95,9 @@ A source that raises is logged with its traceback and skipped, and the other sou
 | `1` | Every source failed (reported first, even if scoring also stopped) |
 | `2` | Invalid configuration file, nothing was collected |
 | `3` | The collection is saved, but scoring was skipped (invalid LLM or agent settings) or stopped early |
+| `4` | The digest was not sent, or only partly (Telegram settings missing or invalid, sending failed). Unsent articles go out with the next digest |
+
+When several problems happen, the earliest is reported: 1, then 3, then 4.
 
 First real run (17 sources): 215 articles collected, 211 new, in about 7 seconds. A second run right after it added 0 new articles.
 

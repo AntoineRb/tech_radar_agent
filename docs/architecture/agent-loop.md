@@ -98,6 +98,7 @@ Scoring also runs when every source failed: articles left unscored by an earlier
 | `1` | Every source failed. Reported first, even if scoring also stopped |
 | `2` | Invalid configuration file: nothing was collected, no LLM call |
 | `3` | The collection is saved, but scoring was skipped (invalid LLM or agent settings) or stopped early |
+| `4` | The digest was not sent, or only partly (Telegram settings missing or invalid, sending failed). Unsent articles go out with the next digest |
 
 ## Tests
 

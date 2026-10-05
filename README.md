@@ -9,7 +9,7 @@
 
 Every day it collects articles from Hacker News, GitHub, tech blogs and arXiv, asks an LLM to judge each one against your interest profile, summarizes the best, and fits them into the time you have. It is written **from scratch, without any agent framework**: no LangChain, no CrewAI, no SDK. The whole agent loop is one readable file, every design choice is documented, and the key ones are measured.
 
-> **Status.** v0.2.0 is released: collection, LLM scoring and summaries work end to end, with a local model ([Ollama](https://ollama.com)) or any OpenAI-compatible API. On `dev` for v0.3.0: the digest is selected and rendered (below). **Next: sending it on Telegram every morning**, scheduled with GitHub Actions.
+> **Status.** v0.2.0 is released: collection, LLM scoring and summaries work end to end, with a local model ([Ollama](https://ollama.com)) or any OpenAI-compatible API. v0.3.0: the digest is selected, rendered and sent on Telegram (below). **Next: running it every morning** on GitHub Actions.
 
 ## What you get every morning
 
@@ -92,7 +92,7 @@ flowchart LR
     D --> M
     M --> S["Select<br/>fits your reading time"]
     S --> R["Render<br/>Telegram, your language"]
-    R -.-> E["Deliver<br/>Telegram, next"]
+    R --> E["Deliver<br/>Telegram"]
     E -.-> F["Adapt<br/>your feedback, later"]
     F -.-> B
 ```
@@ -101,7 +101,7 @@ The LLM client is ~260 lines of `httpx` speaking the OpenAI chat completions for
 
 ## Design choices, measured
 
-Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (25 ADRs).
+Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (27 ADRs).
 
 | Choice | Measurement |
 |---|---|
@@ -127,8 +127,8 @@ An agent that reads the web reads hostile text. The rules are in [`docs/security
 
 ## Engineering
 
-- **817 tests in ~0.4 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
-- **Tests checked by injecting bugs**: 56 bugs planted one at a time in the agent loop, `main()`, the digest selection, its rendering and the translations, every one caught (two of them only after strengthening the tests).
+- **887 tests in ~0.5 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
+- **Tests checked by injecting bugs**: 77 bugs planted one at a time in the agent loop, `main()`, the digest selection, its rendering, the translations and the Telegram delivery (four of them reintroducing a token leak), every one caught (two only after strengthening the tests).
 - **CI** on every pull request and push, with GitHub Actions.
 - **Failure handling with clear outcomes**: one broken source never stops the others, an LLM outage never loses the day's collection, and exit codes tell CI what happened.
 - **Documented**: architecture pages and one ADR per decision, under [`docs/`](docs/README.md).
@@ -141,11 +141,13 @@ An agent that reads the web reads hostile text. The rules are in [`docs/security
 git clone https://github.com/AntoineRb/tech_radar_agent.git
 cd tech_radar_agent
 uv sync
-cp .env.example .env   # then set LLM_BASE_URL and LLM_MODEL (see docs/configuration.md)
-uv run --env-file .env tech-radar-agent
+cp .env.example .env   # then set LLM_BASE_URL, LLM_MODEL, TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+uv run --env-file .env tech-radar-agent              # collect, score, send the digest on Telegram
+uv run --env-file .env tech-radar-agent --dry-run    # the same, but write the digest to output/ instead of sending it
+uv run --env-file .env tech-radar-agent --preview    # only build the digest from the database: no collection, no LLM
 ```
 
-uv installs the right Python version and every dependency from `uv.lock`. Without LLM settings, the run still collects, then skips scoring and exits with code `3`.
+uv installs the right Python version and every dependency from `uv.lock`. A Telegram bot takes two minutes to create with [@BotFather](https://t.me/BotFather); [configuration](docs/configuration.md#environment-variables) explains how to find your chat id. Nothing is ever lost when a step fails: without LLM settings the run still collects (exit code `3`), and without Telegram it still scores (exit code `4`), keeping the digest for the next run.
 
 Describe what you care about in [`config/interests.yaml`](config/interests.yaml), in plain words:
 
@@ -189,7 +191,7 @@ tech_radar_agent/
 
 ## Known limitations
 
-- The digest is not sent yet: it is selected and rendered, and Telegram delivery comes next (v0.3.0).
+- The digest is sent when you run the agent: the daily schedule on GitHub Actions comes next.
 - Summary faithfulness is not measured yet. In the example above, "Python 3.15 is (almost) here" became "announces the release". An evaluation set is planned.
 - Articles without text (many Hacker News links) are judged on their title, source and domain only.
 - Deduplication is by URL: the same story on two sites is not merged yet.
@@ -198,12 +200,12 @@ tech_radar_agent/
 
 - [x] **v0.1.0: Collection.** `Article` model, SQLite storage, collectors for Hacker News, RSS / Atom and GitHub, config-driven sources.
 - [x] **v0.2.0: Agent loop.** LLM client, scoring against the interest profile, summaries, retries and failure handling, CI.
-- [ ] **v0.3.0: The daily digest.**
+- [x] **v0.3.0: The digest on Telegram.**
   - [x] Sent-item tracking, so an article is never sent twice.
   - [x] Selection within a reading-time budget: best first, nothing lost, never empty.
   - [x] Rendering in Telegram HTML, in the reader's language, everything escaped.
-  - [ ] Delivery on Telegram.
-  - [ ] A daily run on GitHub Actions.
+  - [x] Delivery on Telegram, with `--dry-run` and `--preview`.
+- [ ] **Next: a daily run** on GitHub Actions, so the digest arrives every morning on its own.
 - [ ] **v0.4.0: Feedback and adaptation.** 👍 / 👎 on digest items, feedback-aware scoring, recurring "hot topics".
 - [ ] **Alongside:** an LLM evaluation set to compare prompts and models reproducibly.
 
