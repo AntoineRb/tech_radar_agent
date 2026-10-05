@@ -29,7 +29,7 @@ Collectors catch the `ValueError`, log it and skip the item.
 
 Source-specific data goes into `extra` so the shared schema stays small (see [ADR 0004](../decisions/0004-source-specific-data-in-extra.md)).
 
-The LLM results (`score`, `summary`) are not fields of `Article` yet. They are stored in the database. Whether they should also live on `Article` will be decided when the scoring loop is built.
+The LLM results (`score`, `reason`, `interests`, `summary`) are not fields of `Article`: `Article` describes what the collection brings back. The [agent loop](agent-loop.md) gets them from `Scorer` and `Summarizer` and writes them to the database with `save_score` and `save_summary`, using the id from `StoredArticle`.
 
 ## `normalized_url`: the deduplication key
 

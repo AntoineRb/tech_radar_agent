@@ -37,21 +37,24 @@ flowchart LR
 | feedparser | RSS / Atom feeds parsing | ✅ |
 | PyYAML | Interest profile and source configuration | ✅ |
 | SQLite | The agent's memory | ✅ |
-| LLM API | Relevance scoring and summarization | 🔜 |
+| LLM API (OpenAI-compatible, local or remote) | Relevance scoring and summarization | ✅ |
 | GitHub Actions | Daily schedule | 🔜 |
 
 ## Getting started
 
-> For now the agent only collects: it fetches the sources listed in [`config/interests.yaml`](config/interests.yaml) and stores new articles in `data/tech_radar.db`. LLM scoring comes next.
+> For now the agent collects, scores and summarizes: it fetches the sources listed in [`config/interests.yaml`](config/interests.yaml), stores new articles in `data/tech_radar.db`, then an LLM scores the recent ones against your profile and summarizes the best. The daily digest comes next.
 
-**Prerequisite:** [uv](https://docs.astral.sh/uv/getting-started/installation/) installed.
+**Prerequisites:** [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, and an LLM server speaking the OpenAI chat completions format: a local model with [Ollama](https://ollama.com), or a remote API.
 
 ```bash
 git clone https://github.com/AntoineRb/tech_radar_agent.git
 cd tech_radar_agent
 uv sync
-uv run tech-radar-agent
+cp .env.example .env   # then set LLM_BASE_URL and LLM_MODEL (see docs/configuration.md)
+uv run --env-file .env tech-radar-agent
 ```
+
+Without LLM settings, the run still collects, then skips scoring and exits with code `3`.
 
 uv installs the right Python version and all dependencies automatically, based on `.python-version` and `uv.lock`.
 
@@ -61,6 +64,8 @@ uv installs the right Python version and all dependencies automatically, based o
 tech_radar_agent/
 ├── src/tech_radar_agent/
 │   ├── models.py        # the Article data model
+│   ├── agent/           # scoring, summaries and the agent loop
+│   ├── llm/             # LLM settings and client
 │   ├── collectors/      # one module per source
 │   └── storage/         # SQLite persistence
 ├── config/

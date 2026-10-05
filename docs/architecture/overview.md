@@ -21,9 +21,9 @@ flowchart LR
 | Orchestration (`main()`) and config | ✅ Done | `__init__.py`, `config.py`, `config/interests.yaml` |
 | LLM settings (local or remote) | ✅ Done | `llm/settings.py`, `.env.example` |
 | LLM client (no tools, strict response checks) | ✅ Done | `llm/client.py` |
-| Scoring: prompts and answer validation | ✅ Done, not wired into `main()` yet | `agent/scoring.py` ([details](scoring.md)) |
-| Summary: what the article brings, links and HTML rejected | ✅ Done, not wired into `main()` yet | `agent/summary.py` ([details](summary.md)) |
-| Agent loop: threshold, retries, storing results, wiring into `main()` | 🔜 Next | `agent/` |
+| Scoring: prompts and answer validation | ✅ Done | `agent/scoring.py` ([details](scoring.md)) |
+| Summary: what the article brings, links and HTML rejected | ✅ Done | `agent/summary.py` ([details](summary.md)) |
+| Agent loop: threshold, retries, storing results, wired into `main()` | ✅ Done | `agent/loop.py` ([details](agent-loop.md)) |
 | Digest and delivery | Planned | — |
 | Feedback | Planned | — |
 
@@ -40,6 +40,7 @@ src/tech_radar_agent/
 ├── agent/
 │   ├── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
 │   ├── summary.py   # Summarizer: summary prompt, LLM call, answer validation (no links, no HTML)
+│   ├── loop.py      # score_and_summarize: the agent loop, retries, stops, LoopReport
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
 ├── llm/
 │   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment
@@ -52,7 +53,7 @@ src/tech_radar_agent/
 │   ├── hackernews.py
 │   └── rss.py
 └── storage/
-    ├── __init__.py  # public API: connect, save_articles
+    ├── __init__.py  # public API: connect, save_articles, fetch_articles_to_score, save_score, save_summary
     └── database.py  # SQLite schema and queries
 config/interests.yaml  # interest profile and list of sources
 data/                  # local SQLite database (git-ignored, kept with .gitkeep)
@@ -66,14 +67,17 @@ data/                  # local SQLite database (git-ignored, kept with .gitkeep)
 2. Loads the [configuration](../configuration.md) and builds every collector. Any config error stops the run here, before any network call.
 3. Opens the database, then runs the collectors one by one. Each source's articles are saved right away, so a later crash loses nothing.
 4. Logs a summary: articles collected, new articles, failed sources.
+5. Reads the `LLM_*` and `AGENT_*` settings, then runs the [agent loop](agent-loop.md): scores the recent unscored articles, summarizes those at or above the threshold, and saves each result at once. Invalid settings skip this step; the collection is already saved.
+6. Logs a summary: articles scored, summarized, failed, and how many are left after an early stop.
 
-A source that raises is logged with its traceback and skipped, and the other sources keep running.
+A source that raises is logged with its traceback and skipped, and the other sources keep running. An LLM failure is handled by the loop: skip the article, retry, or stop scoring.
 
 | Exit code | Meaning |
 |---|---|
-| `0` | Run completed, possibly with some failed sources |
-| `1` | Every source failed |
-| `2` | Invalid configuration, nothing was collected |
+| `0` | Run completed, possibly with some failed sources or articles |
+| `1` | Every source failed (reported first, even if scoring also stopped) |
+| `2` | Invalid configuration file, nothing was collected |
+| `3` | The collection is saved, but scoring was skipped (invalid LLM or agent settings) or stopped early |
 
 First real run (17 sources): 215 articles collected, 211 new, in about 7 seconds. A second run right after it added 0 new articles.
 
