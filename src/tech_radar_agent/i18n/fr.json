@@ -1,0 +1,18 @@
+{
+  "language_names": ["French", "Français", "Francais"],
+  "header": "Tech Radar · $date",
+  "article_count_one": "$count article · environ $minutes min de lecture",
+  "article_count_other": "$count articles · environ $minutes min de lecture",
+  "to_read": "À LIRE",
+  "also_worth_a_look": "À VOIR AUSSI",
+  "why": "Pourquoi :",
+  "discussion": "Discussion",
+  "empty_report": "Rien de noté $threshold ou plus aujourd'hui : $collected nouveaux articles, $scored notés, meilleure note $best.",
+  "empty_report_nothing_scored": "Aucun article noté aujourd'hui : $collected nouveaux articles collectés.",
+  "date": "$weekday $day $month",
+  "weekdays": ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"],
+  "months": [
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre"
+  ]
+}

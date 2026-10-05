@@ -29,7 +29,10 @@ tests/
 │   ├── test_summary.py      # parse_summary (links, HTML, false positives, hidden links), summary prompt, Summarizer
 │   ├── test_loop.py         # call_with_retry, score_and_summarize: thresholds, retries, stops, report counts
 │   ├── test_digest.py       # reading_seconds, select_entries: costs, budget rules, selection properties
+│   ├── test_render.py       # Telegram HTML: layout, both languages, hostile text in every field, complete blocks
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
+├── i18n/
+│   └── test_labels.py       # every language file against the label contract, language lookup, English fallback, placeholder safety
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
 │   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged

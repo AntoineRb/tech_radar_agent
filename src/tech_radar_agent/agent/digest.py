@@ -25,13 +25,15 @@ ENTRY_OVERHEAD_SECONDS = 3  # Fixed cost per entry: spotting the line, its score
 
 
 def reading_seconds(candidate: DigestCandidate) -> float:
-    """Estimated time, in seconds, to read one digest entry and decide whether to open the article.
+    """Estimated time, in seconds, to scan one digest entry and decide whether to look further.
 
-    The text read is the title, plus the summary when there is one, otherwise the reason. Words are
-    counted with str.split(), so any run of spaces, tabs or newlines separates two words.
+    Only what is visible by default counts: the title and the reason. The summary is folded (an
+    expandable quote in Telegram), so unfolding it is extra time the reader chose to spend. Every entry
+    is costed the same way, with or without a summary. Words are counted with str.split(), so any run
+    of spaces, tabs or newlines separates two words.
     """
-    # The title, plus the summary when there is one, otherwise the reason: what the entry will show.
-    text = candidate.summary or candidate.reason
+    # What the entry shows before any tap: the title and the reason (ADR 0024).
+    text = candidate.reason
     title_words: int = len(candidate.article.title.split())
     text_words: int = len(text.split())
     total_words: int = title_words + text_words

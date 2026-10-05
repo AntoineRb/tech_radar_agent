@@ -26,7 +26,9 @@ flowchart LR
 | Agent loop: threshold, retries, storing results, wired into `main()` | ✅ Done | `agent/loop.py` ([details](agent-loop.md)) |
 | Digest: selection plumbing (`sent_at`, candidates, `digest` config) | ✅ Done | `storage/`, `config.py` ([ADR 0023](../decisions/0023-digest-selection.md)) |
 | Digest: selection within a reading-time budget | ✅ Done | `agent/digest.py` ([details](digest.md)) |
-| Digest: rendering and delivery | 🔜 Next | — |
+| Digest: labels in the reader's language | ✅ Done | `i18n/` ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)) |
+| Digest: rendering in Telegram HTML | ✅ Done | `agent/render.py` ([details](digest.md#rendering-in-telegram-html)) |
+| Digest: delivery on Telegram, wiring, daily schedule | 🔜 Next | — |
 | Feedback | Planned | — |
 
 ## Code layout
@@ -44,7 +46,12 @@ src/tech_radar_agent/
 │   ├── summary.py   # Summarizer: summary prompt, LLM call, answer validation (no links, no HTML)
 │   ├── loop.py      # score_and_summarize: the agent loop, retries, stops, LoopReport
 │   ├── digest.py    # select_entries: the digest entries that fit in the reading-time budget
+│   ├── render.py    # render_digest: Telegram HTML blocks, everything escaped
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
+├── i18n/
+│   ├── __init__.py  # load_labels: the digest's fixed labels in the reader's language, English fallback
+│   ├── en.json      # the default language, and the file to copy to translate
+│   └── fr.json
 ├── llm/
 │   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment
 │   ├── client.py    # LlmClient: OpenAI-compatible chat completions over httpx
