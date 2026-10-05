@@ -30,7 +30,7 @@ profile:
 | Key | Required | Meaning |
 |---|---|---|
 | `about` | yes | Free text that gives the LLM some context. `>` joins the lines into one paragraph |
-| `language` | no (default `English`) | Language of the text you read in the digest, as a plain name (`French`, not `fr`). Prompt instructions stay in English |
+| `language` | no (default `English`) | Language of the text you read in the digest, as a plain name (`French`, not `fr`). Prompt instructions stay in English. The LLM writes reasons and summaries in it; the digest's fixed labels follow when a translation file exists (see below), otherwise they are in English |
 | `interests.high` / `medium` / `low` | at least one interest | Topics by priority, as `id: description` (see below). Empty priorities are allowed |
 | `not_interested` | no | Topics that should lower the score, even if they match an interest |
 
@@ -46,6 +46,17 @@ Tips:
 - Be specific. "Apple (platforms, developer tools, hardware)" gives better results than "Apple", which would also match earnings and rumors.
 - The exclusion list matters as much as the interests: it is what keeps the digest short.
 - Keep the list short (about 10 to 15 interests, checked by a test). A long list makes the prompt longer and the model less focused.
+
+### Digest labels in your language
+
+The digest's fixed labels (section titles, "Why:", the date) come from one file per language in [`src/tech_radar_agent/i18n/`](../src/tech_radar_agent/i18n/): English and French today. To add a language:
+
+1. Copy `en.json` to a new file named with the language code, for example `de.json`.
+2. Translate the values, for example by pasting the file into any LLM chat. Keep every key, and keep each `$placeholder` exactly as it is.
+3. List the names that select it in `language_names`, for example `["German", "Deutsch"]`.
+4. Run `uv run pytest tests/i18n`: the tests check that the file has every label, with the right placeholders, 7 weekdays and 12 months.
+
+A language without a file still works: content in that language, labels in English. See [ADR 0025](decisions/0025-digest-labels-in-language-files.md).
 
 ### `sources`: where articles come from
 

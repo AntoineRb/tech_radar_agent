@@ -6,6 +6,8 @@ The digest is the agent's final decision: which of the day's good articles deser
 2. **Selection** within a reading-time budget: [`agent/digest.py`](../../src/tech_radar_agent/agent/digest.py), described below.
 3. **Rendering and delivery**: planned (v0.3.0), on Telegram in HTML. Each entry shows its title, score, interest tags and reason; the summary is folded in an expandable quote. Articles with a summary come first, then those without, each section sorted by score. The articles are marked as sent (`mark_sent`) only once the digest was delivered.
 
+The fixed labels (section titles, "Why:", the date) come from `i18n/` in the reader's language, with an English fallback ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)).
+
 The design decisions are in [ADR 0023](../decisions/0023-digest-selection.md) (selection) and [ADR 0024](../decisions/0024-digest-on-telegram-with-folded-summaries.md) (Telegram, display, reading cost).
 
 ## Selection within a reading-time budget

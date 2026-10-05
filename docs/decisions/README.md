@@ -28,6 +28,7 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0022](0022-continuous-integration.md) | Continuous integration: tests on every pull request and push, with pinned actions and a read-only token | Accepted |
 | [0023](0023-digest-selection.md) | Digest selection: a reading-time budget, best first, oldest first on ties, never empty | Accepted; reading cost superseded by 0024 |
 | [0024](0024-digest-on-telegram-with-folded-summaries.md) | Digest on Telegram, in HTML, with folded summaries: the reading cost counts only what is visible | Accepted |
+| [0025](0025-digest-labels-in-language-files.md) | Digest labels in one JSON file per language, checked against a contract in the code | Accepted |
 
 ## Template
 
