@@ -1,18 +1,21 @@
-"""La boucle agentique : noter les articles récents, résumer les meilleurs, enregistrer le tout.
+"""The agent loop: score recent articles, summarize the best ones, save everything as it goes (ADR 0018-0020).
 
+    call_with_retry(call, sleep=...)                                     -> whatever `call` returns
     score_and_summarize(conn, scorer, summarizer, settings, model=...)  -> LoopReport
 
-Pour chaque article à noter (fetch_articles_to_score) :
-    noter -> save_score -> si score >= seuil : résumer -> save_summary (si le résumé n'est pas None)
+For each article to score (fetch_articles_to_score), newest first:
+    score -> if score >= threshold: summarize -> save_score -> save_summary (unless the summary is None)
 
-Gestion des erreurs (décision 8, voir CLAUDE.md) : la boucle DÉCIDE, le client a déjà CLASSÉ.
-- LlmError (de base, dont ScoreValidationError / SummaryValidationError) : propre à un article
-  -> passer l'article, continuer. Mais MAX_CONSECUTIVE_FAILURES d'affilée -> arrêt (problème global).
-- LlmTemporaryError : réessayer après RETRY_DELAYS (ou retry_after), puis arrêt si ça échoue encore.
-- LlmFatalError : arrêt immédiat.
-Dans tous les cas, ce qui est déjà enregistré reste en base (save_* commit tout de suite).
-
-⚠️ Commentaires temporairement en français : à repasser en anglais à la fin de l'exercice.
+Failure handling (ADR 0019): the client CLASSIFIES errors, this loop DECIDES what to do with them.
+- LlmError itself, ScoreValidationError, SummaryValidationError: about this one article. Skip it and go on.
+  A failed scoring leaves the article unscored, retried at the next run; a failed summary keeps the
+  score without a summary (retrying would give the same answer at temperature 0). MAX_CONSECUTIVE_FAILURES
+  scoring failures in a row stop the loop: something global is wrong.
+- LlmTemporaryError: retried after RETRY_DELAYS (or the server's retry_after), then the loop stops.
+- LlmFatalError: the loop stops at once.
+A stop saves nothing for the article it happened on, even during its summary: that article stays
+unscored and is processed again, from scratch, at the next run. Everything saved before stays saved
+(each save_* commits at once). Any other exception is a bug and propagates.
 """
 
 import logging
@@ -25,22 +28,20 @@ from typing import TypeVar
 from tech_radar_agent.agent.scoring import Scorer
 from tech_radar_agent.agent.settings import AgentSettings
 from tech_radar_agent.agent.summary import Summarizer
-from tech_radar_agent.llm.client import LlmError, LlmFatalError, LlmTemporaryError  # noqa: F401 (à utiliser)
-from tech_radar_agent.storage.database import fetch_articles_to_score, save_score, save_summary  # noqa: F401
+from tech_radar_agent.llm.client import LlmError, LlmFatalError, LlmTemporaryError
+from tech_radar_agent.storage.database import fetch_articles_to_score, save_score, save_summary
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")  # Le type renvoyé par l'appel réessayé : Score pour le scoring, str | None pour le résumé.
+T = TypeVar("T")  # What the retried call returns: Score for scoring, str | None for a summary.
 
-# --- Garde-fous (décision 8) ---
-MAX_CONSECUTIVE_FAILURES = 5  # Échecs « propres à un article » d'affilée -> c'est sans doute global : arrêt.
-RETRY_DELAYS = (2.0, 8.0)  # Attentes avant la 2e puis la 3e tentative sur une erreur temporaire.
-MAX_RETRY_AFTER = 60.0  # Plafond pour Retry-After. (Question : pourquoi ne pas faire confiance au serveur ?)
+# --- Failure guards (ADR 0019) ---
+MAX_CONSECUTIVE_FAILURES = 5  # Scoring failures in a row: likely global (broken prompt, model), so stop.
+RETRY_DELAYS = (2.0, 8.0)  # Seconds to wait before the 2nd, then the 3rd attempt after a temporary error.
+MAX_RETRY_AFTER = 60.0  # Cap on the server's Retry-After: a buggy or hostile server must not block the run.
 
 
-# ---------------------------------------------------------------------------------------------
-# Étape 1 : ce que la boucle renvoie à main()
-# ---------------------------------------------------------------------------------------------
+# --- Run report ---
 
 
 @dataclass(frozen=True)
@@ -91,9 +92,7 @@ class LoopReport:
         return self.total - self.scored - self.score_failed
 
 
-# ---------------------------------------------------------------------------------------------
-# Étape 2 : réessayer un appel sur erreur temporaire
-# ---------------------------------------------------------------------------------------------
+# --- Retrying temporary errors ---
 
 
 def call_with_retry(call: Callable[[], T], *, sleep: Callable[[float], None] = time.sleep) -> T:
@@ -131,9 +130,7 @@ def call_with_retry(call: Callable[[], T], *, sleep: Callable[[float], None] = t
     return call()
 
 
-# ---------------------------------------------------------------------------------------------
-# Étape 3 : la boucle
-# ---------------------------------------------------------------------------------------------
+# --- The loop ---
 
 
 def score_and_summarize(
@@ -145,48 +142,86 @@ def score_and_summarize(
     model: str,
     sleep: Callable[[float], None] = time.sleep,
 ) -> LoopReport:
-    """Note les articles à noter, résume ceux au-dessus du seuil, enregistre tout au fur et à mesure.
+    """Score recent unscored articles, then summarize the best ones.
 
-    Entrées :
-        conn       : la connexion SQLite (créée et fermée par main(), comme aujourd'hui).
-        scorer     : un Scorer déjà construit (prompt system calculé une fois).
-        summarizer : un Summarizer déjà construit.
-        settings   : AgentSettings (fenêtre en jours, max par lancement, seuil de résumé).
-        model      : le nom du modèle, stocké dans scored_with (llm_settings.model côté main()).
-        sleep      : transmis à call_with_retry (faux dans les tests).
-    Sortie :
-        Un LoopReport. Ne lève PAS d'exception LLM : un arrêt est une information du bilan, pas un crash.
-        (Est-ce le bon choix ? C'est ta réponse à la question de l'étape 1.)
+    Args:
+        conn: Open database connection.
+        scorer: Rates an article from 0 to 10.
+        summarizer: Summarizes an article.
+        settings: Age window, per-run limit and summary threshold.
+        model: Model name, stored in `scored_with`.
+        sleep: Injected so tests can record waits instead of sleeping.
 
-    TODO :
-    1. articles = fetch_articles_to_score(conn, settings.max_article_age_days, settings.max_articles_per_run)
-       Rien à noter -> bilan vide, sans aucun appel au LLM.
-    2. Pour chaque StoredArticle (champs .id et .article) :
-       a. score = call_with_retry(lambda: scorer.score(...), sleep=sleep)
-       b. Sous le seuil : save_score(conn, stored.id, score=..., reason=..., interests=..., scored_with=model).
-       c. À partir du seuil (score.score >= settings.summary_threshold) : résumer (même call_with_retry)
-          AVANT d'enregistrer quoi que ce soit, puis selon le résultat (décision A + D, ci-dessous) :
-          - résumé (str) : save_score puis save_summary ;
-          - None (rien à résumer) : save_score seul ;
-          - erreur propre à l'article (SummaryValidationError, LlmError de base) : save_score seul,
-            compté dans summary_failed ;
-          - arrêt (LlmFatalError, ou LlmTemporaryError après les nouvelles tentatives) : RIEN
-            d'enregistré pour cet article, arrêt de la boucle.
-       d. compteurs du bilan (voir la docstring de LoopReport).
-    3. Les trois catégories d'erreurs (voir la docstring du module). Où placer le try/except : autour de
-       tout le traitement d'un article, ou séparément autour du scoring et du résumé ? Indice : une
-       erreur d'article ne mène pas au même enregistrement selon qu'elle arrive à la note ou au résumé.
-    4. Le compteur d'échecs consécutifs : quand le remettre à zéro ? Un échec de résumé compte-t-il ?
-    5. Logs : un message par article raté (titre + type d'erreur), un par arrêt (pourquoi). Jamais la
-       réponse brute du LLM dans les logs (non fiable). Le bilan final, c'est main() qui l'écrit.
-
-    Décision A + D (résumé en échec après une note réussie), selon que réessayer peut aider ou non :
-    - Réponse invalide : la note est enregistrée sans résumé (A). Réessayer ne servirait à rien
-      (temperature=0 : même entrée, même réponse) ; l'article reste utile dans le digest.
-    - Arrêt pendant le résumé (serveur en panne) : rien n'est enregistré (D). L'article reste non noté,
-      fetch_articles_to_score le reprend en entier au lancement suivant. Coût : une notation refaite.
-    Écarté : C (requête de rattrapage des résumés manquants) : colonne ou sentinelle en plus pour
-    distinguer « rien à résumer » d'« échec », pour des données non critiques. Possible plus tard si
-    des résumés manquent dans les vrais digests.
+    Returns:
+        A report of what happened. Never raises an LLM exception: an early
+        stop is reported through `stop_reason`.
     """
-    raise NotImplementedError
+    articles = fetch_articles_to_score(
+        conn, settings.max_article_age_days, settings.max_articles_per_run
+    )
+
+    scored = 0
+    score_failed = 0
+    summarized = 0
+    summary_failed = 0
+    consecutive_failures = 0
+    stop_reason: str | None = None
+
+    for stored in articles:
+        article = stored.article
+
+        # Scoring
+        try:
+            result = call_with_retry(lambda: scorer.score(article), sleep=sleep)
+        except (LlmTemporaryError, LlmFatalError) as error:
+            # Before LlmError: these are subclasses of it
+            stop_reason = f"{type(error).__name__}: {error}"
+            break
+        except LlmError as error:
+            score_failed += 1
+            consecutive_failures += 1
+            # The message is safe to log: validation errors never echo the LLM answer.
+            logger.warning("Scoring failed for %r: %s (%s)", article.title, type(error).__name__, error)
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                stop_reason = f"{consecutive_failures} consecutive scoring failures"
+                break
+            continue
+        consecutive_failures = 0
+
+        # Summary
+        summary: str | None = None
+        if result.score >= settings.summary_threshold:
+            try:
+                summary = call_with_retry(lambda: summarizer.summarize(article), sleep=sleep)
+            except (LlmTemporaryError, LlmFatalError) as error:
+                stop_reason = f"{type(error).__name__}: {error}"
+                break
+            except LlmError as error:
+                summary_failed += 1
+                logger.warning("Summary failed for %r: %s (%s)", article.title, type(error).__name__, error)
+
+        # Saving
+        save_score(
+            conn,
+            stored.id,
+            score=result.score,
+            reason=result.reason,
+            interests=result.interests,
+            scored_with=model,
+        )
+        scored += 1
+        if summary is not None:
+            save_summary(conn, stored.id, summary)
+            summarized += 1
+
+    if stop_reason is not None:
+        logger.error("Scoring stopped: %s", stop_reason)
+
+    return LoopReport(
+        total=len(articles),
+        scored=scored,
+        score_failed=score_failed,
+        summarized=summarized,
+        summary_failed=summary_failed,
+        stop_reason=stop_reason,
+    )
