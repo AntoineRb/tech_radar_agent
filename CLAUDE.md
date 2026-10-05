@@ -39,7 +39,7 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 ## 🧪 Tests (règle)
 
 - **Chaque feature ajoutée ou modifiée arrive avec ses tests**, dans la même MR. Chaque bug corrigé arrive avec un test qui échoue sans le correctif.
-- `uv run pytest` doit passer avant chaque MR.
+- `uv run pytest` doit passer avant chaque MR. GitHub Actions (`.github/workflows/tests.yml`) le relance sur chaque PR et chaque push vers `dev` et `main` (ADR 0022).
 - Jamais de réseau ni de vraie base dans les tests : fixture `fake_http` (faux serveur HTTP, `httpx.MockTransport`) et `tmp_path`. La fixture autouse `no_network` fait échouer toute vraie requête.
 - La sécurité se teste avec des entrées hostiles, pas seulement le cas nominal.
 - Quand c'est moi qui code (partie agent), Claude me guide aussi sur les tests (quoi tester, cas limites) sans les écrire à ma place.
@@ -97,7 +97,7 @@ docs/                  # doc technique en anglais : architecture/, decisions/ (A
 tests/                 # pytest, même arborescence que src/ ; conftest.py = fixtures partagées
 ```
 
-Tenir `docs/` à jour à chaque étape terminée (ADR 0001 à 0021 à jour au 2026-10-05 ; document perso `PREPARATION_ENTRETIEN.md`, ignoré par git, à enrichir avec les nouvelles décisions) : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
+Tenir `docs/` à jour à chaque étape terminée (ADR 0001 à 0022 à jour au 2026-10-05 ; document perso `PREPARATION_ENTRETIEN.md`, ignoré par git, à enrichir avec les nouvelles décisions) : page d'architecture concernée + un ADR par nouvelle décision (`docs/decisions/NNNN-titre.md`, et ligne dans `docs/decisions/README.md`).
 
 **Diagrammes : toujours en Mermaid** (bloc ` ```mermaid `), jamais en ASCII art (`┌──►`…), qui s'affiche mal. Dans les étiquettes, éviter les guillemets imbriqués, les apostrophes, les accolades et le JSON (ex. `'{"summary": ""}'` cassait tout le diagramme) : écrire en mots simples (`empty summary`), et mettre le texte des nœuds entre `"…"`. Les arborescences de fichiers restent en bloc ` ```text `.
 
@@ -140,7 +140,7 @@ _Terminée le 2026-10-05. Écart avec le plan : le résumé dit **ce que l'artic
 
 _Dernière session : 2026-10-05._
 
-**▶️ Reprendre ici (prochaine session)** : **Soirée 2 terminée** (boucle agentique mergée dans `dev`, 633 tests, premier vrai lancement complet OK avec qwen3.6). Avant tout : `git checkout dev && git pull`. **Prochaine étape, à choisir en début de session** : (a) **Soirée 3** : colonne de statut « envoyé », digest Markdown/HTML (texte LLM échappé, liens venant de la base), envoi mail ou Discord, GitHub Actions (persistance de la base à trancher) ; ou (b) le point 1 du « niveau pro » : **jeu d'évaluation du LLM** (y inclure la fidélité des résumés). `LOOP_GUIDE.md` (ignoré par git) ne sert plus : peut être supprimé.
+**▶️ Reprendre ici (prochaine session)** : **Soirée 2 terminée** (boucle agentique mergée dans `dev`, 633 tests, premier vrai lancement complet OK avec qwen3.6). Avant tout : `git checkout dev && git pull`. **Prochaine étape, à choisir en début de session** : (a) **Soirée 3** : colonne de statut « envoyé », digest Markdown/HTML (texte LLM échappé, liens venant de la base), envoi mail ou Discord, GitHub Actions (persistance de la base à trancher) ; ou (b) le point 1 du « niveau pro » : **jeu d'évaluation du LLM** (y inclure la fidélité des résumés). `LOOP_GUIDE.md` (ignoré par git) ne sert plus : peut être supprimé. Licence MIT ajoutée (MR #16). CI des tests ajoutée sur `feature/github-actions-ci` (vérifier le 1er run sur GitHub ; option : rendre le check obligatoire dans la protection de branche de `dev`/`main`).
 
 **Soirée 2 terminée le 2026-10-05** (client LLM, scoring, résumé, boucle, branchement dans `main()`). Historique :
 
@@ -227,7 +227,7 @@ Choix d'architecture validés, avec leur raison. Une ligne par décision.
 
 Objectif du projet : portfolio pour basculer vers le dev agentique. Évaluation actuelle : semi-pro, pratiques d'ingénierie de niveau pro. À faire après la Soirée 2 (moment naturel : on aura de toute façon des choses à déployer) :
 1. **Jeu d'évaluation du LLM** (le manque le plus visible pour un poste agentique) : ~20 articles avec la note attendue (et quelques cas pièges : injection, sujet exclu, contenu vide), une commande reproductible (ex. `uv run python -m tech_radar_agent.eval`) qui donne un score par prompt/modèle. Transforme nos mesures ponctuelles en démarche reproductible ; servira aussi à recalibrer `AGENT_SUMMARY_THRESHOLD` en changeant de modèle. ⚠️ Lancement sur Ollama local uniquement avec mon accord (RAM).
-2. **CI GitHub Actions** (gratuite, dépôt public) : pytest + `ruff` + `mypy` sur chaque PR. Nouvelles dépendances de dev à valider selon les règles de sécurité ; actions épinglées par SHA. **Pas de runner auto-hébergé** (dangereux sur un dépôt public : une PR de fork exécuterait du code sur mon Mac).
+2. **CI GitHub Actions** (gratuite, dépôt public) : ✅ pytest sur chaque PR et push vers `dev`/`main` (2026-10-05, ADR 0022 : `actions/checkout` et `astral-sh/setup-uv` épinglés par SHA, vérifiés ; token en lecture seule ; `pull_request`, jamais `pull_request_target` ; uv épinglé, `uv sync --locked`). Reste : `ruff` + `mypy` (+ éventuellement `pip-audit`) sur chaque PR. Nouvelles dépendances de dev à valider selon les règles de sécurité ; actions épinglées par SHA. **Pas de runner auto-hébergé** (dangereux sur un dépôt public : une PR de fork exécuterait du code sur mon Mac).
 3. **README orienté recruteur** : le problème, l'architecture en un schéma Mermaid, 3-4 décisions clés **avec leurs mesures**, limites connues, capture d'un vrai digest.
 (Le point 1 de la liste, « finir et déployer », correspond aux Soirées 2-3. Exécution quotidienne prévue via une API LLM distante sur les machines GitHub : qwen3.6 local impossible en CI, pas de GPU ni assez de RAM.)
 
@@ -237,7 +237,6 @@ Objectif du projet : portfolio pour basculer vers le dev agentique. Évaluation 
 - Nettoyage de la base : supprimer les articles trop anciens (je le ferai à la main en local), voire automatiquement plus tard (ex. purge des articles de plus de X jours à chaque lancement, en gardant ceux qui ont un feedback pour la Soirée 4).
 - Colonne de statut (envoyé / pas envoyé) : pas encore dans le schéma. À ajouter à la Soirée 3 (`ALTER TABLE ... ADD COLUMN` suffit en SQLite).
 - Couverture de code (`pytest-cov`) et linter (`ruff`) : utiles plus tard, chaque ajout passe par la validation des dépendances.
-- CI : lancer `uv run pytest` sur chaque MR via GitHub Actions (à faire avec l'automatisation de la Soirée 3).
 - Rattrapage des résumés manquants (option C, ADR 0021) : une requête qui retente les résumés absents des articles ≥ seuil. Écarté pour l'instant (colonne ou sentinelle en plus pour distinguer « rien à résumer » d'« échec »). À revoir si des résumés manquent dans les vrais digests.
 - Fidélité des résumés : 1er essai réel, « (almost) here » devenu « annonce la sortie ». À mesurer dans le jeu d'évaluation, pas à corriger au jugé.
 - Persistance de la base en CI : chaque run GitHub Actions part d'une machine neuve, donc le `.db` de la veille (la mémoire de l'agent) disparaît. Options possibles : cache Actions, artifact, commit de la base, stockage externe. À trancher à la Soirée 3.

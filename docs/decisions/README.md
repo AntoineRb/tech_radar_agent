@@ -25,6 +25,7 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0019](0019-failure-handling.md) | Failure handling in the agent loop | Accepted |
 | [0020](0020-storing-results.md) | Storing results: four new columns, the model recorded, in-place schema upgrade | Accepted |
 | [0021](0021-partial-failures-in-the-loop.md) | Partial failures in the loop: a failed summary keeps the score, a stop saves nothing | Accepted |
+| [0022](0022-continuous-integration.md) | Continuous integration: tests on every pull request and push, with pinned actions and a read-only token | Accepted |
 
 ## Template
 

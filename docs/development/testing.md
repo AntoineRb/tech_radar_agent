@@ -82,6 +82,10 @@ The scoring part runs for real (`LlmClient`, `Scorer`, `Summarizer`, the loop): 
 
 `tests/agent/test_loop.py` uses a real SQLite database in `tmp_path`, `FakeScorer` / `FakeSummarizer` (a reply per article title: a result, an exception, or a list consumed one per call), and `sleep=waits.append`. Its `run()` helper checks the `LoopReport` invariants on every run.
 
+## Continuous integration
+
+[`.github/workflows/tests.yml`](../../.github/workflows/tests.yml) runs the whole suite on GitHub Actions for every pull request and every push to `dev` and `main`: `uv sync --locked --all-groups`, then `uv run --locked pytest`, on a GitHub-hosted Ubuntu runner, with a read-only token and no secret. The tests need none: they never touch the network or an LLM, and `test_main.py` clears any `LLM_*` / `AGENT_*` variable. See [ADR 0022](../decisions/0022-continuous-integration.md).
+
 ## Rules
 
 - Test file names must be unique across folders (there is no `__init__.py` in `tests/`): `tests/llm/test_cli.py`, not a second `test_main.py`.
