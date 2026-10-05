@@ -1,6 +1,6 @@
 # 0023. Digest selection: a reading-time budget, best first, oldest first on ties, never empty
 
-- Status: Accepted
+- Status: Accepted; reading cost superseded by [ADR 0024](0024-digest-on-telegram-with-folded-summaries.md)
 - Date: 2026-10-05
 
 ## Context

@@ -1,8 +1,12 @@
 """Tests for agent/digest.py: pure functions, so no database and no LLM.
 
-Candidates are built so that their cost is known exactly: a one-word title (its name, used to identify
-it in the results) plus a summary of a chosen number of words. At 200 words per minute, a word costs
-0.3 s, and each entry has a fixed ENTRY_OVERHEAD_SECONDS on top.
+Only what an entry shows before any tap is costed: its title and its reason (ADR 0024). The summary is
+folded, so it never counts. Candidates are built so that their cost is known exactly: a one-word title
+(its name, used to identify it in the results) plus a reason of a chosen number of words. At 200 words
+per minute, a word costs 0.3 s, and each entry has a fixed ENTRY_OVERHEAD_SECONDS on top.
+
+A real reason is at most 300 characters (about 50 words), so a real entry costs at most about 33 s.
+Some selection tests use longer, artificial costs to make a rule visible: they say so.
 
 Run one group only: uv run pytest tests/agent/test_digest.py -k select
 """
@@ -35,7 +39,8 @@ def entry(name: str, seconds: float) -> DigestCandidate:
     multiples of 3 s (6, 9, 30, 54…) always work. The check below catches any other value.
     """
     total_words = round((seconds - ENTRY_OVERHEAD_SECONDS) / SECONDS_PER_WORD)
-    candidate = make_candidate(title=name, summary=words(total_words - 1))
+    # The words go in the reason, the costed text. A summary is added to show it changes nothing.
+    candidate = make_candidate(title=name, reason=words(total_words - 1), summary=words(80))
     assert reading_seconds(candidate) == pytest.approx(seconds)  # The helper itself is checked.
     return candidate
 
@@ -47,36 +52,31 @@ def names(candidates: list[DigestCandidate]) -> list[str]:
 # --- reading_seconds ---
 
 
-def test_cost_of_an_entry_with_summary():
-    candidate = make_candidate(title=words(10), summary=words(90), reason=words(50))
-    # 100 words (the reason is not read when there is a summary) = 30 s, plus the fixed cost.
+def test_cost_counts_the_title_and_the_reason():
+    candidate = make_candidate(title=words(10), reason=words(90), summary=words(50))
+    # 100 words (title + reason; the folded summary is not counted) = 30 s, plus the fixed cost.
     assert reading_seconds(candidate) == pytest.approx(30 + ENTRY_OVERHEAD_SECONDS)
 
 
-def test_cost_of_an_entry_without_summary_uses_the_reason():
-    candidate = make_candidate(title=words(10), summary=None, reason=words(20))
-    assert reading_seconds(candidate) == pytest.approx(30 * SECONDS_PER_WORD + ENTRY_OVERHEAD_SECONDS)
+@pytest.mark.parametrize("summary", [None, "", "Short summary.", words(80)], ids=["none", "empty", "short", "long"])
+def test_the_summary_is_never_counted(summary):
+    # Folded in the digest: unfolding it is extra time the reader chose to spend. So an entry with a
+    # summary costs exactly what the same entry without one costs.
+    without = make_candidate(title=words(10), reason=words(20), summary=None)
+    assert reading_seconds(make_candidate(title=words(10), reason=words(20), summary=summary)) == reading_seconds(without)
 
 
-def test_an_empty_summary_falls_back_to_the_reason():
-    with_empty = make_candidate(summary="", reason=words(20))
-    without = make_candidate(summary=None, reason=words(20))
-    assert reading_seconds(with_empty) == reading_seconds(without)
+def test_longer_reason_costs_more():
+    assert reading_seconds(make_candidate(reason=words(40))) > reading_seconds(make_candidate(reason=words(10)))
 
 
-def test_the_reason_is_ignored_when_there_is_a_summary():
-    short_reason = make_candidate(summary=words(40), reason="Short.")
-    long_reason = make_candidate(summary=words(40), reason=words(60))
-    assert reading_seconds(short_reason) == reading_seconds(long_reason)
-
-
-def test_longer_text_costs_more():
-    assert reading_seconds(make_candidate(summary=words(80))) > reading_seconds(make_candidate(summary=words(30)))
+def test_longer_title_costs_more():
+    assert reading_seconds(make_candidate(title=words(30))) > reading_seconds(make_candidate(title=words(5)))
 
 
 def test_cost_counts_words_whatever_the_spacing():
-    spaced = make_candidate(title="Python release", summary="one two three four")
-    messy = make_candidate(title="Python release", summary="  one\ttwo\n\nthree    four ")
+    spaced = make_candidate(title="Python release", reason="one two three four")
+    messy = make_candidate(title="Python release", reason="  one\ttwo\n\nthree    four ")
     assert reading_seconds(messy) == reading_seconds(spaced)
 
 
@@ -112,8 +112,8 @@ def test_an_entry_that_does_not_fit_is_skipped_and_selection_goes_on():
 
 
 def test_the_best_candidate_is_kept_even_beyond_the_budget():
-    # Real entries cost 57 s at most (300-character title, 600-character summary), so with a 1-minute
-    # minimum this rule is a guard: it needs an artificially long candidate to be seen.
+    # Real entries cost about 33 s at most (300-character title and reason), so with a 1-minute minimum
+    # this rule is a guard: it needs an artificially long candidate to be seen.
     candidates = [entry("too-long", 90), entry("short", 6)]
     assert names(select_entries(candidates, budget_minutes=1)) == ["too-long"]  # Budget already used up.
 
@@ -144,9 +144,9 @@ def test_a_tuple_of_candidates_is_accepted():
 
 @pytest.fixture
 def realistic() -> list[DigestCandidate]:
-    """Twelve entries from 6 s to 57 s. A fixture, not a module constant: if `entry()` breaks, each test
-    fails on its own instead of the whole file failing to load."""
-    return [entry(f"e{i}", seconds) for i, seconds in enumerate([57, 33, 12, 6, 45, 27, 9, 51, 18, 6, 36, 15])]
+    """Twelve entries from 6 s to 33 s, the realistic range. A fixture, not a module constant: if `entry()`
+    breaks, each test fails on its own instead of the whole file failing to load."""
+    return [entry(f"e{i}", seconds) for i, seconds in enumerate([33, 21, 12, 6, 27, 15, 9, 30, 18, 6, 24, 12])]
 
 
 @pytest.mark.parametrize("budget_minutes", [1, 2, 3, 5, 10])
@@ -166,6 +166,8 @@ def test_a_larger_budget_keeps_what_the_smaller_one_kept_before_its_first_skip(r
 def test_a_larger_budget_can_hold_fewer_but_better_ranked_entries():
     # Not a bug: best first. With 2 minutes, the two well-ranked 54 s entries fit and take the room of
     # three lower-ranked short ones. So "more time" means "more of the best", not "more entries".
+    # The 54 s costs are artificial (a real entry costs about 33 s at most): with realistic costs, a
+    # search found no such case with up to 8 candidates between 1 and 2 minutes, but it stays possible.
     candidates = [entry("a", 9), entry("b", 54), entry("c", 54), entry("d", 6), entry("e", 6), entry("f", 6)]
     assert names(select_entries(candidates, budget_minutes=1)) == ["a", "d", "e", "f"]
     assert names(select_entries(candidates, budget_minutes=2)) == ["a", "b", "c"]
