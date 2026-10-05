@@ -81,7 +81,7 @@ See the [documentation](docs/README.md) for architecture details and design deci
 ## Roadmap
 
 - [x] **Step 1: Collection.** Project setup, `Article` model, SQLite storage, collectors for Hacker News, RSS and GitHub.
-- [ ] **Step 2: Agent loop.** LLM scoring against the interest profile, relevance summaries, error handling and rate limiting.
+- [x] **Step 2: Agent loop.** LLM scoring against the interest profile, relevance summaries, error handling and rate limiting.
 - [ ] **Step 3: Memory and delivery.** Cross-source deduplication, sent-item tracking, daily digest by email or Discord, scheduling with GitHub Actions.
 - [ ] **Step 4: Feedback and adaptation.** 👍 / 👎 feedback on digest items, feedback-aware scoring, detection of recurring "hot topics".
 
