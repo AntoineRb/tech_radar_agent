@@ -28,7 +28,8 @@ flowchart LR
 | Digest: selection within a reading-time budget | ✅ Done | `agent/digest.py` ([details](digest.md)) |
 | Digest: labels in the reader's language | ✅ Done | `i18n/` ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)) |
 | Digest: rendering in Telegram HTML | ✅ Done | `agent/render.py` ([details](digest.md#rendering-in-telegram-html)) |
-| Digest: delivery on Telegram, wiring, daily schedule | 🔜 Next | — |
+| Digest: delivery on Telegram | ✅ Done | `delivery/telegram.py` ([details](digest.md#delivery-on-telegram)) |
+| Digest: wiring into `main()`, `--dry-run`, daily schedule | 🔜 Next | — |
 | Feedback | Planned | — |
 
 ## Code layout
@@ -48,6 +49,8 @@ src/tech_radar_agent/
 │   ├── digest.py    # select_entries: the digest entries that fit in the reading-time budget
 │   ├── render.py    # render_digest: Telegram HTML blocks, everything escaped
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
+├── delivery/
+│   └── telegram.py  # Telegram Bot API: settings, packing, sending, the token never leaks
 ├── i18n/
 │   ├── __init__.py  # load_labels: the digest's fixed labels in the reader's language, English fallback
 │   ├── en.json      # the default language, and the file to copy to translate

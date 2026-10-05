@@ -4,8 +4,12 @@
     render_empty_report(labels, threshold, collected, scored, best)   -> str         a day with no candidate
 
 The output is a LIST OF BLOCKS (header, section titles, one block per entry), not one string: delivery
-groups the blocks into messages of at most 4096 characters WITHOUT EVER cutting inside a tag, which
-would make Telegram reject the whole message. So every block is complete HTML on its own.
+groups the blocks into messages of at most MAX_MESSAGE_LENGTH WITHOUT EVER cutting inside a tag, which
+would make Telegram reject the whole message. So every block is complete HTML on its own, and an entry
+block carries its article id, so delivery can mark exactly the articles of each message it sent.
+
+An entry too long for one message (an abnormally long URL) is lightened: without its summary, then
+without its discussion link. If it still does not fit, it is left out and logged; it stays unsent.
 
 One entry:
 
@@ -21,8 +25,10 @@ database. Only Telegram's tags are used: <b>, <i>, <a href>, <blockquote expanda
 """
 
 import html
+import logging
 import math
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 
 from tech_radar_agent.agent.digest import reading_seconds
@@ -30,12 +36,29 @@ from tech_radar_agent.i18n import Labels
 from tech_radar_agent.sanitize import is_safe_url
 from tech_radar_agent.storage import DigestCandidate
 
+logger = logging.getLogger(__name__)
+
+MAX_MESSAGE_LENGTH = 4096  # Telegram's limit for one message, in UTF-16 code units (an emoji counts 2).
+
 TOP_SCORE = 9  # From this score the badge is green; below, yellow.
 TOP_BADGE = "🟢"
 GOOD_BADGE = "🟡"
 HEADER_ICON = "🗞"
 SECTION_ICONS = {"to_read": "📖", "also_worth_a_look": "🔗"}
 DISCUSSION_ICON = "💬"
+
+
+@dataclass(frozen=True)
+class Block:
+    """One piece of the digest, complete HTML on its own. Entries carry their article id."""
+
+    html: str
+    article_id: int | None = None  # None for the header and the section titles.
+
+
+def telegram_length(text: str) -> int:
+    """The length Telegram measures: UTF-16 code units, so an emoji outside the basic plane counts 2."""
+    return len(text.encode("utf-16-le")) // 2
 
 
 def _escape(text: str) -> str:
@@ -77,8 +100,13 @@ def discussion_url(candidate: DigestCandidate) -> str | None:
 # --- One entry ---
 
 
-def render_entry(candidate: DigestCandidate, labels: Labels) -> str:
-    """One digest entry, as complete Telegram HTML (see the module docstring)."""
+def render_entry(
+    candidate: DigestCandidate, labels: Labels, *, with_summary: bool = True, with_discussion: bool = True
+) -> str:
+    """One digest entry, as complete Telegram HTML (see the module docstring).
+
+    with_summary / with_discussion: False drops that part, to lighten an entry too long for a message.
+    """
     article = candidate.article
     lines = [
         f"{score_badge(candidate.score)} {candidate.score}/10 · "
@@ -90,20 +118,33 @@ def render_entry(candidate: DigestCandidate, labels: Labels) -> str:
 
     lines.append(f"<i>{_escape(labels.text('why'))} {_escape(candidate.reason)}</i>")
 
-    if candidate.summary:
+    if with_summary and candidate.summary:
         lines.append(f"<blockquote expandable>{_escape(candidate.summary)}</blockquote>")
 
-    discussion = discussion_url(candidate)
+    discussion = discussion_url(candidate) if with_discussion else None
     if discussion is not None:
         lines.append(f'{DISCUSSION_ICON} <a href="{_escape(discussion)}">{_escape(labels.text("discussion"))}</a>')
 
     return "\n".join(lines)  # Telegram has no <br>: real line breaks.
 
 
+def fit_entry(candidate: DigestCandidate, labels: Labels) -> str | None:
+    """The entry in its richest version that fits in one message, or None if even the lightest does not.
+
+    Full, then without the summary, then without the discussion link too: the title always keeps its
+    link to the article. Never cut: a cut inside escaped HTML (&amp; -> &am) makes Telegram reject it.
+    """
+    for with_summary, with_discussion in ((True, True), (False, True), (False, False)):
+        entry = render_entry(candidate, labels, with_summary=with_summary, with_discussion=with_discussion)
+        if telegram_length(entry) <= MAX_MESSAGE_LENGTH:
+            return entry
+    return None
+
+
 # --- The digest ---
 
 
-def render_digest(entries: Sequence[DigestCandidate], labels: Labels, today: date) -> list[str]:
+def render_digest(entries: Sequence[DigestCandidate], labels: Labels, today: date) -> list[Block]:
     """The digest blocks: the header, then each non-empty section with one block per entry.
 
     Args:
@@ -113,30 +154,39 @@ def render_digest(entries: Sequence[DigestCandidate], labels: Labels, today: dat
 
     Returns:
         [header, section title, entry, entry, ..., section title, entry, ...]. Empty when there is no
-        entry: a day with no candidate gets render_empty_report instead.
+        entry to show: a day with no candidate gets render_empty_report instead. An entry too long for
+        one message even when lightened is left out (and logged), so the header counts what is shown.
     """
-    if not entries:
+    fitted: list[tuple[DigestCandidate, str]] = []
+    for entry in entries:
+        rendered = fit_entry(entry, labels)
+        if rendered is None:
+            logger.warning("Digest entry too long for a Telegram message, left out: %r", entry.article.title[:80])
+            continue
+        fitted.append((entry, rendered))
+    if not fitted:
         return []
 
+    shown = [entry for entry, _ in fitted]
     # Rounded before ceil: a float sum like 120.00000000000001 s must not add a minute.
-    minutes = max(1, math.ceil(round(sum(reading_seconds(entry) for entry in entries) / 60, 6)))
-    count_key = "article_count_one" if len(entries) == 1 else "article_count_other"
+    minutes = max(1, math.ceil(round(sum(reading_seconds(entry) for entry in shown) / 60, 6)))
+    count_key = "article_count_one" if len(shown) == 1 else "article_count_other"
     header = (
         f"<b>{HEADER_ICON} {_escape(labels.text('header', date=labels.date(today)))}</b>\n"
-        f"{_escape(labels.text(count_key, count=len(entries), minutes=minutes))}"
+        f"{_escape(labels.text(count_key, count=len(shown), minutes=minutes))}"
     )
-    blocks = [header]
+    blocks = [Block(header)]
 
     # Articles with a summary first, then the others; each section keeps the selection order.
     sections = {
-        "to_read": [entry for entry in entries if entry.summary],
-        "also_worth_a_look": [entry for entry in entries if not entry.summary],
+        "to_read": [(entry, rendered) for entry, rendered in fitted if entry.summary],
+        "also_worth_a_look": [(entry, rendered) for entry, rendered in fitted if not entry.summary],
     }
     for key, section in sections.items():
         if not section:
             continue  # An empty section gets no title.
-        blocks.append(f"<b>{SECTION_ICONS[key]} {_escape(labels.text(key))}</b>")
-        blocks.extend(render_entry(entry, labels) for entry in section)
+        blocks.append(Block(f"<b>{SECTION_ICONS[key]} {_escape(labels.text(key))}</b>"))
+        blocks.extend(Block(rendered, entry.id) for entry, rendered in section)
 
     return blocks
 

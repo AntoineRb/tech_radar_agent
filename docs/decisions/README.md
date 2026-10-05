@@ -29,6 +29,7 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0023](0023-digest-selection.md) | Digest selection: a reading-time budget, best first, oldest first on ties, never empty | Accepted; reading cost superseded by 0024 |
 | [0024](0024-digest-on-telegram-with-folded-summaries.md) | Digest on Telegram, in HTML, with folded summaries: the reading cost counts only what is visible | Accepted |
 | [0025](0025-digest-labels-in-language-files.md) | Digest labels in one JSON file per language, checked against a contract in the code | Accepted |
+| [0026](0026-telegram-delivery.md) | Telegram delivery: whole blocks per message, marked message by message, the token never leaks | Accepted |
 
 ## Template
 

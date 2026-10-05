@@ -31,6 +31,8 @@ tests/
 │   ├── test_digest.py       # reading_seconds, select_entries: costs, budget rules, selection properties
 │   ├── test_render.py       # Telegram HTML: layout, both languages, hostile text in every field, complete blocks
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
+├── delivery/
+│   └── test_telegram.py     # fake Telegram server: packing, errors, retries, partial sending, token never leaked
 ├── i18n/
 │   └── test_labels.py       # every language file against the label contract, language lookup, English fallback, placeholder safety
 ├── llm/

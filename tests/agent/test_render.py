@@ -8,6 +8,7 @@ Run one group only: uv run pytest tests/agent/test_render.py -k escape
 """
 
 import html
+from dataclasses import replace
 from datetime import date
 from html.parser import HTMLParser
 from typing import Any
@@ -17,13 +18,17 @@ import pytest
 from tech_radar_agent.agent.digest import ENTRY_OVERHEAD_SECONDS, READING_SPEED_WPM
 from tech_radar_agent.agent.render import (
     GOOD_BADGE,
+    MAX_MESSAGE_LENGTH,
     TOP_BADGE,
+    Block,
     discussion_url,
+    fit_entry,
     hashtag,
     render_digest,
     render_empty_report,
     render_entry,
     score_badge,
+    telegram_length,
 )
 from tech_radar_agent.i18n import load_labels
 from tech_radar_agent.models import Article
@@ -191,6 +196,11 @@ def test_entry_is_complete_html_with_telegram_tags_only():
 # --- The digest ---
 
 
+def digest_html(entries, labels, today) -> list[str]:
+    """The HTML of each block of render_digest."""
+    return [block.html for block in render_digest(entries, labels, today)]
+
+
 def costing(seconds: float, name: str, **fields: Any) -> DigestCandidate:
     """A candidate whose reading cost is exactly `seconds` (a one-word title plus a reason)."""
     reason_words = round((seconds - ENTRY_OVERHEAD_SECONDS) * READING_SPEED_WPM / 60) - 1
@@ -202,16 +212,16 @@ def test_empty_digest_has_no_block():
 
 
 def test_digest_starts_with_the_header():
-    header = render_digest([make_candidate()], EN, TODAY)[0]
+    header = digest_html([make_candidate()], EN, TODAY)[0]
     title, count = header.splitlines()
     assert title == "<b>🗞 Tech Radar · Tuesday 6 October</b>"
     assert count.startswith("1 article · about ")
 
 
 def test_header_uses_singular_and_plural():
-    assert render_digest([make_candidate()], EN, TODAY)[0].splitlines()[1].startswith("1 article ")
+    assert digest_html([make_candidate()], EN, TODAY)[0].splitlines()[1].startswith("1 article ")
     three = [make_candidate(title=f"T{i}", url=f"https://example.com/{i}") for i in range(3)]
-    assert render_digest(three, EN, TODAY)[0].splitlines()[1].startswith("3 articles ")
+    assert digest_html(three, EN, TODAY)[0].splitlines()[1].startswith("3 articles ")
 
 
 @pytest.mark.parametrize(
@@ -221,13 +231,13 @@ def test_header_uses_singular_and_plural():
 )
 def test_header_minutes_are_rounded_up_and_at_least_one(costs, minutes):
     entries = [costing(seconds, f"e{i}") for i, seconds in enumerate(costs)]
-    assert f"about {minutes} min to scan" in render_digest(entries, EN, TODAY)[0]
+    assert f"about {minutes} min to scan" in digest_html(entries, EN, TODAY)[0]
 
 
 def test_entries_with_summary_come_first_then_the_others():
     no_summary = make_candidate(title="Link only", url="https://example.com/1", score=10)
     with_summary = make_candidate(title="Summarized", url="https://example.com/2", score=8, summary="S.")
-    blocks = render_digest([no_summary, with_summary], EN, TODAY)
+    blocks = digest_html([no_summary, with_summary], EN, TODAY)
     assert blocks[1] == "<b>📖 TO READ</b>"
     assert "Summarized" in blocks[2]
     assert blocks[3] == "<b>🔗 ALSO WORTH A LOOK</b>"
@@ -238,19 +248,19 @@ def test_entries_with_summary_come_first_then_the_others():
 def test_order_is_kept_within_each_section():
     entries = [make_candidate(title=name, url=f"https://example.com/{name}", summary=summary)
                for name, summary in [("a", "S"), ("b", None), ("c", "S"), ("d", None), ("e", "S")]]
-    entry_blocks = [block for block in render_digest(entries, EN, TODAY) if "/10 · " in block]
+    entry_blocks = [block for block in digest_html(entries, EN, TODAY) if "/10 · " in block]
     titles = [block.splitlines()[0].split('">', 1)[1].removesuffix("</a>") for block in entry_blocks]
     assert titles == ["a", "c", "e", "b", "d"]
 
 
 def test_empty_section_has_no_title():
-    blocks = render_digest([make_candidate(summary="S.")], EN, TODAY)
+    blocks = digest_html([make_candidate(summary="S.")], EN, TODAY)
     assert "<b>📖 TO READ</b>" in blocks
     assert not [block for block in blocks if "ALSO WORTH A LOOK" in block]
 
 
 def test_digest_in_french():
-    blocks = render_digest([make_candidate(summary="S."), make_candidate(url="https://example.com/2")], FR, TODAY)
+    blocks = digest_html([make_candidate(summary="S."), make_candidate(url="https://example.com/2")], FR, TODAY)
     assert blocks[0].splitlines()[0] == "<b>🗞 Tech Radar · mardi 6 octobre</b>"
     assert "environ" in blocks[0] and "min de lecture" in blocks[0]
     assert "<b>📖 À LIRE</b>" in blocks and "<b>🔗 À VOIR AUSSI</b>" in blocks
@@ -262,7 +272,7 @@ def test_every_block_is_complete_html_and_fits_in_a_telegram_message():
                extra={"discussion_url": HN + "0" * 50})
     entries = [make_candidate(title="T" * 300, url=f"https://example.com/{i}?" + "q=1&" * 60, **big) for i in range(5)]
     entries += [make_candidate(title="<b>Link</b>", url="https://example.com/link")]
-    for block in render_digest(entries, FR, TODAY):
+    for block in digest_html(entries, FR, TODAY):
         assert_complete_telegram_html(block)
         assert len(block) < 4096
 
@@ -286,3 +296,66 @@ def test_empty_report_in_french_is_escaped():
     report = render_empty_report(FR, threshold=8, collected=42, scored=38, best=7)
     assert report.startswith("Rien de noté 8 ou plus aujourd&#x27;hui")  # The apostrophe is escaped.
     assert_complete_telegram_html(report)
+
+
+
+# --- Blocks carry article ids ---
+
+
+def test_entry_blocks_carry_their_article_id_and_others_none():
+    with_summary = replace(make_candidate(title="A", url="https://example.com/a", summary="S."), id=11)
+    no_summary = replace(make_candidate(title="B", url="https://example.com/b"), id=22)
+    blocks = render_digest([with_summary, no_summary], EN, TODAY)
+    assert all(isinstance(block, Block) for block in blocks)
+    assert [block.article_id for block in blocks] == [None, None, 11, None, 22]  # header, title, A, title, B
+
+
+# --- Entries too long for one Telegram message ---
+
+
+def test_telegram_length_counts_emojis_twice():
+    assert telegram_length("abc") == 3
+    assert telegram_length("🟢") == 2  # Outside the basic plane: two UTF-16 code units.
+    assert telegram_length("é") == 1
+
+
+def huge_url(length: int) -> str:
+    return "https://example.com/?" + "q" * (length - len("https://example.com/?"))
+
+
+def test_a_normal_entry_keeps_everything():
+    candidate = make_candidate(summary="S.", extra={"discussion_url": HN})
+    assert fit_entry(candidate, EN) == render_entry(candidate, EN)
+
+
+def test_a_too_long_entry_drops_its_summary_first():
+    # The summary alone pushes it over the limit: the lighter version keeps the discussion link.
+    candidate = make_candidate(summary="s " * 2100, extra={"discussion_url": HN})
+    fitted = fit_entry(candidate, EN)
+    assert fitted is not None and "blockquote" not in fitted and "Discussion" in fitted
+    assert telegram_length(fitted) <= MAX_MESSAGE_LENGTH
+
+
+def test_a_still_too_long_entry_drops_its_discussion_link_too():
+    # A long URL (escaped twice: article and discussion) leaves room only without the discussion link.
+    long_url = huge_url(2100)
+    discussion = long_url.replace("example.com", "news.example.com")
+    candidate = make_candidate(url=long_url, summary="S.", extra={"discussion_url": discussion})
+    fitted = fit_entry(candidate, EN)
+    assert fitted is not None and "Discussion" not in fitted and "blockquote" not in fitted
+    assert long_url in fitted  # The title still links to the article.
+
+
+def test_an_entry_that_cannot_fit_is_left_out_and_logged(caplog):
+    too_long = make_candidate(title="Too long", url=huge_url(4200))
+    normal = make_candidate(title="Normal", url="https://example.com/normal")
+    assert fit_entry(too_long, EN) is None
+    with caplog.at_level("WARNING"):
+        blocks = digest_html([too_long, normal], EN, TODAY)
+    assert "1 article · " in blocks[0]  # The header counts what is shown.
+    assert not [block for block in blocks if "Too long" in block]
+    assert "left out" in caplog.text and "Too long" in caplog.text
+
+
+def test_nothing_shown_when_no_entry_fits():
+    assert render_digest([make_candidate(url=huge_url(4200))], EN, TODAY) == []
