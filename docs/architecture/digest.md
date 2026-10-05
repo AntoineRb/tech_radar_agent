@@ -4,7 +4,8 @@ The digest is the agent's final decision: which of the day's good articles deser
 
 1. **Candidates**, from the database: `fetch_digest_candidates` ([storage](storage.md)) returns the articles scored at or above the threshold, not sent yet and recent enough, already in selection order.
 2. **Selection** within a reading-time budget: [`agent/digest.py`](../../src/tech_radar_agent/agent/digest.py), described below.
-3. **Rendering and delivery**: planned (v0.3.0), on Telegram in HTML. Each entry shows its title, score, interest tags and reason; the summary is folded in an expandable quote. Articles with a summary come first, then those without, each section sorted by score. The articles are marked as sent (`mark_sent`) only once the digest was delivered.
+3. **Rendering** in Telegram HTML: [`agent/render.py`](../../src/tech_radar_agent/agent/render.py), described below.
+4. **Delivery** on Telegram: planned (v0.3.0). The articles are marked as sent (`mark_sent`) only once the digest was delivered.
 
 The fixed labels (section titles, "Why:", the date) come from `i18n/` in the reader's language, with an English fallback ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)).
 
@@ -49,6 +50,36 @@ The selection is greedy: it takes the best candidates first. So a larger budget 
 
 This is intended: the digest favors the best-ranked articles over the number of articles. With realistic costs (at most about 33 s per entry) it has become rare: a search found no case with up to 8 candidates between 1 and 2 minutes. What always holds: the total never exceeds the budget (except for the forced first entry), and a larger budget keeps everything a smaller one kept before its first skip. Both are checked by tests.
 
+## Rendering in Telegram HTML
+
+```text
+🗞 Tech Radar · Tuesday 6 October
+12 articles · about 3 min to scan
+
+📖 TO READ
+🟢 9/10 · Python 3.15: Cool New Features         (the title links to the article)
+#python #dev_tooling · realpython
+Why: Technical article on the new features of Python 3.15...
+┃ The article presents the new features...       (folded summary: one tap unfolds it)
+💬 Discussion                                     (Hacker News, when there is one)
+
+🔗 ALSO WORTH A LOOK
+🟡 8/10 · Apple and a Hacker's Future
+#apple · hackernews
+Why: Title related to Apple...
+```
+
+| Function | Returns |
+|---|---|
+| `render_digest(entries, labels, today)` | A list of **blocks**: the header (date, number of articles, minutes to scan rounded up), then each non-empty section title followed by one block per entry. Empty for no entry |
+| `render_empty_report(labels, threshold, collected, scored, best)` | The one-line report of a day with no candidate |
+| `render_entry(candidate, labels)` | One entry: badge (🟢 from 9, 🟡 below), score, title linking to the article, hashtags (`ai-agents` becomes `#ai_agents`, since a dash ends a Telegram hashtag), source, the reason, the folded summary, the discussion link |
+
+- **Blocks, not one string**: every block is complete HTML, so delivery can pack blocks into messages of at most 4096 characters without ever cutting inside a tag (Telegram would reject the whole message).
+- **Everything is escaped** with `html.escape(..., quote=True)`: titles, sources, reasons, summaries, tags, and the labels too (a translated file is text nobody here wrote). URLs are escaped inside `href`, so a quote cannot open another attribute.
+- **Links come only from the database.** The discussion link comes from `extra`, which is not validated at collection time: it is kept only if it is a string and a safe web URL, and dropped when it is the article URL itself (an "Ask HN" post).
+- Labels come from `i18n/` in the reader's language ([ADR 0025](../decisions/0025-digest-labels-in-language-files.md)); `today` is passed in, never read from the clock, so the output can be tested.
+
 ## Tests
 
-`tests/agent/test_digest.py` builds candidates with a known cost (a one-word title plus a reason of a chosen number of words, and a summary that must change nothing; the helper checks the cost it produces). It covers the cost rules (title and reason counted, the summary never counted whatever its length, spacing, fixed cost), the budget rules (exact fit, skip and go on, forced first entry, order kept, input never modified), and the properties above on a realistic mix of entries. Checked by injecting bugs into `digest.py` (`<` instead of `<=`, `break` instead of `continue`, the summary counted again, the reason or the title forgotten, the original inverted formula…): each one makes tests fail.
+`tests/agent/test_digest.py` builds candidates with a known cost (a one-word title plus a reason of a chosen number of words, and a summary that must change nothing; the helper checks the cost it produces). It covers the cost rules (title and reason counted, the summary never counted whatever its length, spacing, fixed cost), the budget rules (exact fit, skip and go on, forced first entry, order kept, input never modified), and the properties above on a realistic mix of entries. `tests/agent/test_render.py` checks the layout, both languages, singular and plural, minutes rounded up, the section order, and hostile text in every field (with `html.parser`, every block must be complete HTML using only Telegram's tags). Checked by injecting bugs into `digest.py` (`<` instead of `<=`, `break` instead of `continue`, the summary counted again, the reason or the title forgotten, the original inverted formula…): each one makes tests fail; and 13 into `render.py` (each escaping removed, `quote=False`, an unsafe or repeated discussion link, minutes rounded down, sections swapped…), all caught.

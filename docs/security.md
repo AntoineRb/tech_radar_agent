@@ -117,6 +117,8 @@ Security checks are covered by tests that use hostile input. See [testing.md](de
 - `test_config.py`: `yaml.safe_load` refuses to build Python objects.
 - `collectors/test_github.py::TestAuthentication`: the token comes only from the environment.
 - `agent/test_scoring.py`: hostile LLM answers (duplicate keys, `true` as a score, invented ids, extra fields whose names are never echoed), delimiter escapes (`</ARTICLE >`, `<arti<article>cle>`), fake lines hidden in tags, hostile `extra`, and injection text that must never reach the system message.
+- `agent/test_render.py`: hostile titles, reasons, summaries and sources (`<script>`, `</blockquote>`, a fake `javascript:` link) stay text in the digest; a quote in a URL cannot leave `href`; an unsafe or non-text discussion link is dropped; every block is complete HTML with Telegram's tags only.
+- `i18n/test_labels.py`: translation placeholders can never read attributes (`$x.__class__` stays text).
 - `llm/test_client.py`: tools can never be offered, tool-call answers are refused, the key never reaches logs.
 - `llm/test_settings.py`: http only towards localhost (look-alike hosts refused), API key hidden from `repr()`, no real key in `.env.example`.
 
