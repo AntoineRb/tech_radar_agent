@@ -137,9 +137,9 @@ Objectif : `uv run tech-radar-agent` remplit une base SQLite avec 50 à 100 arti
 
 ## 👉 Où on en est
 
-_Dernière session : 2026-10-04._
+_Dernière session : 2026-10-05._
 
-**▶️ Reprendre ici (prochaine session)** : le `Summarizer` est **terminé** sur `feature/summarizer` (code et tests en anglais, doc `docs/architecture/summary.md`, 592 tests) : reste à committer et ouvrir la MR. Ensuite : **la boucle** (`agent/loop.py`, ma partie), puis le branchement dans `main()` (Claude).
+**▶️ Reprendre ici (prochaine session)** : `Summarizer` mergé (MR #14). **Boucle en cours** sur `feature/agent-loop` (rien de commité) : squelette FR `src/tech_radar_agent/agent/loop.py` + 19 tests `@TODO` dans `tests/agent/test_loop.py` (créés par Claude), guide pour le chat Claude `LOOP_GUIDE.md` (ignoré par git, à jour). ✅ Étape 1 `LoopReport` (écrit par moi, corrigé par Claude : `import numpy` supprimé, `failed` → `score_failed`, `not_attempted` → `remaining`, docstrings) : `total, scored, score_failed, summarized, summary_failed, stop_reason: str | None` + propriétés `stopped`, `remaining = total - scored - score_failed` ; chaque article dans une seule case parmi scored/score_failed/remaining, `summarized + summary_failed <= scored`. ✅ Décision **A + D** (résumé en échec après une note ≥ seuil) : réponse invalide → `save_score` sans résumé, `summary_failed` (réessayer inutile à temperature 0) ; arrêt pendant le résumé (fatale / temporaire épuisée) → **rien enregistré**, article repris en entier au lancement suivant, compté dans `remaining` ; donc au-dessus du seuil `save_score` **après** la tentative de résumé. C (rattrapage des résumés manquants) écarté, évolution possible. **Questions ouvertes, une à la fois** : (1) où placer le `try/except` (tout l'article ou note et résumé séparés) ; (2) un échec de résumé compte-t-il dans les 5 échecs consécutifs ; (3) quand remettre ce compteur à zéro. Puis étape 2 `call_with_retry`, étape 3 la boucle, les tests, puis branchement dans `main()` (Claude, code de sortie 3) et ADR de la décision A + D.
 
 **Étape en cours : Soirée 2 — boucle agentique (c'est moi qui code, Claude guide).**
 
