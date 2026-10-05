@@ -25,18 +25,18 @@ INFO    tech_radar_agent: Done: 218 articles collected, 61 new, 0/17 sources fai
 INFO    tech_radar_agent: Scoring with qwen3.6:latest: 3/3 articles scored (0 summarized, 0 summary failures), 0 failed
 ```
 
-Real results from the first runs (qwen3.6, local, October 2026). The profile asks for French, so the agent writes in French:
+Real results from the first runs (qwen3.6, local, October 2026). The agent writes in the reader's language set in the profile, French here, translated below:
 
 | Score | Article | Matched interests | Why, according to the agent |
 |:---:|---|---|---|
-| **8** | The Real Python Podcast #313: Python 3.15, Exploring the New Features | `python` | Article technique sur les nouvelles fonctionnalités de Python 3.15, pertinent pour un développeur Python. |
-| 7 | AI is changing developer work. Here are three skills to strengthen. | `ai-agents`, `dev-tooling` | Article sur l'impact de l'IA sur le développement, pertinent pour les agents IA mais manquant de profondeur technique. |
-| 5 | Apple and a Hacker's Future | `apple` | Titre lié à Apple (intérêt moyen), mais le contenu semble être un essai d'opinion sans substance technique pour un développeur. |
-| 2 | Reverse Engineering Comanche Terrain Maps | none | Sujet de rétro-informatique sans lien direct avec les intérêts techniques prioritaires du lecteur. |
+| **8** | The Real Python Podcast #313: Python 3.15, Exploring the New Features | `python` | Technical article on the new features of Python 3.15, relevant for a Python developer. |
+| 7 | AI is changing developer work. Here are three skills to strengthen. | `ai-agents`, `dev-tooling` | Article on the impact of AI on development, relevant to AI agents but lacking technical depth. |
+| 5 | Apple and a Hacker's Future | `apple` | Title related to Apple (medium interest), but the content looks like an opinion essay with no technical substance for a developer. |
+| 2 | Reverse Engineering Comanche Terrain Maps | none | Retro-computing topic with no direct link to the reader's high-priority technical interests. |
 
 Articles scored 8 or more also get a summary of **what they bring**, so you can decide without opening them:
 
-> L'article annonce la sortie de Python 3.15 et présente des ressources d'apprentissage associées, notamment un tutoriel de démonstration écrit par Bartosz Zaczyński et un cours vidéo de Christopher Trudeau. Ces contenus couvrent les nouvelles fonctionnalités du langage.
+> The article announces the release of Python 3.15 and presents related learning resources, including a showcase tutorial written by Bartosz Zaczyński and a video course by Christopher Trudeau. These cover the new features of the language.
 
 Everything lands in SQLite, ready for the digest:
 

@@ -57,7 +57,7 @@ The digest then shows the title, score, reason and link only.
 ## The answer
 
 ```json
-{"summary": "CPython 3.15 réécrit le décodeur du module json en C, réduisant le temps d'analyse de 38 %…"}
+{"summary": "CPython 3.15 rewrites the json module's decoder in C, cutting parsing time by 38%…"}
 ```
 
 `parse_summary` rejects the whole answer, never repairs it, when:
@@ -100,9 +100,9 @@ Built once per run, identical for every article (prefix cache), in English (abou
 | Summary in English | 0 | 0 |
 | Too-thin text | a hollow summary, shown as if real | **no summary** |
 | Injection with a URL | not repeated | not repeated |
-| Opening "L'article présente…" | 8 | 4 |
+| Opening "The article presents…" (written in French) | 8 | 4 |
 
-A firmer rule against "L'article…" openings was tested and dropped: it broke JSON twice for a phrase that reads naturally in French.
+A firmer rule against "The article…" openings was tested and dropped: it broke JSON twice for a phrase that reads naturally in French.
 
 **Real run** (2 articles from the database): a faithful 47-word French summary (every fact found in the stored content, original technical terms kept), and `None` for a 762-character post quoting an AI agent's personal message. That `None` was checked: removing the injection rule did not change it, so it comes from the faithfulness rule. The injection rule is deliberately left untouched, since loosening it could open a breach.
 

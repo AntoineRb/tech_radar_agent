@@ -106,5 +106,5 @@ Scoring also runs when every source failed: articles left unscored by an earlier
 
 ## What is left
 
-- The digest that shows these results, and a "sent" status so an article is never sent twice (Soirée 3).
+- The digest that shows these results, and a "sent" status so an article is never sent twice (v0.3.0).
 - If summaries turn out to be missing in real digests, a query that retries missing summaries could be added (option C in [ADR 0021](../decisions/0021-partial-failures-in-the-loop.md)).

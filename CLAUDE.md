@@ -14,7 +14,7 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Exceptions où tu peux écrire directement : fichiers de config triviaux (`.gitignore`, `.gitkeep`, etc.), ce `CLAUDE.md`, ou quand je te le demande.
 - Une étape à la fois. Ne pars pas sur la suivante sans que je dise que c'est bon.
 - **Une question à la fois.** Quand plusieurs points sont à trancher, pose-les un par un et attends ma réponse avant le suivant.
-- Parle-moi **en français**. Code, noms, docstrings, commentaires et README **en anglais** (le repo est public). Seul ce `CLAUDE.md` reste en français.
+- Parle-moi **en français**. Code, noms, docstrings, commentaires, README et `docs/` **en anglais** (le repo est public), **y compris les exemples de sortie de l'agent** (raisons, résumés générés en français : les traduire et le signaler). Seul ce `CLAUDE.md` reste en français.
 
 ## Contexte
 
