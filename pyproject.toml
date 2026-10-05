@@ -3,6 +3,8 @@ name = "tech-radar-agent"
 version = "0.1.0"
 description = "A personal tech-watch agent that uses an LLM to curate a daily digest of developer news."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "feedparser>=6.0.14",
