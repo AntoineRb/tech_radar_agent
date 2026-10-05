@@ -5,17 +5,7 @@ import pytest
 import yaml
 
 from tech_radar_agent.collectors import build_collector
-from tech_radar_agent.config import (
-    DEFAULT_LANGUAGE,
-    DEFAULT_READING_TIME_MINUTES,
-    MAX_READING_TIME_MINUTES,
-    MIN_READING_TIME_MINUTES,
-    DigestSettings,
-    Interest,
-    load_config,
-    parse_digest,
-    parse_profile,
-)
+from tech_radar_agent.config import DEFAULT_LANGUAGE, Interest, load_config, parse_profile
 
 REAL_CONFIG = Path(__file__).parents[1] / "config" / "interests.yaml"
 
@@ -170,60 +160,6 @@ def test_yaml_turns_some_keys_into_non_text(tmp_path):
             load_config(write(tmp_path, text))
 
 
-# --- Digest ---
-
-
-def test_digest_section_is_optional(tmp_path):
-    config = load_config(write(tmp_path, PROFILE + SOURCES))
-    assert config.digest == DigestSettings(reading_time_minutes=DEFAULT_READING_TIME_MINUTES, send_empty_report=True)
-    assert DEFAULT_READING_TIME_MINUTES == 5
-
-
-def test_digest_section_is_read(tmp_path):
-    text = PROFILE + SOURCES + "digest:\n  reading_time_minutes: 10\n  send_empty_report: false\n"
-    assert load_config(write(tmp_path, text)).digest == DigestSettings(reading_time_minutes=10, send_empty_report=False)
-
-
-def test_digest_missing_keys_keep_their_defaults():
-    assert parse_digest({}) == DigestSettings()
-    assert parse_digest({"reading_time_minutes": 2}) == DigestSettings(reading_time_minutes=2, send_empty_report=True)
-    assert parse_digest({"send_empty_report": False}).reading_time_minutes == DEFAULT_READING_TIME_MINUTES
-
-
-@pytest.mark.parametrize("minutes", [MIN_READING_TIME_MINUTES, MAX_READING_TIME_MINUTES])
-def test_digest_reading_time_bounds_are_accepted(minutes):
-    assert parse_digest({"reading_time_minutes": minutes}).reading_time_minutes == minutes
-
-
-@pytest.mark.parametrize(
-    ("digest", "message"),
-    [
-        pytest.param(["reading_time_minutes"], "`digest` must be a mapping", id="not-a-mapping"),
-        pytest.param({"reading_time": 5}, "unknown keys", id="misspelled-key"),
-        pytest.param({"reading_time_minutes": 0}, "between 1 and 30", id="zero"),
-        pytest.param({"reading_time_minutes": 31}, "between 1 and 30", id="above-max"),
-        pytest.param({"reading_time_minutes": 50}, "between 1 and 30", id="typo-50-for-5"),
-        pytest.param({"reading_time_minutes": -5}, "between 1 and 30", id="negative"),
-        pytest.param({"reading_time_minutes": 2.5}, "whole number", id="decimal"),
-        pytest.param({"reading_time_minutes": "5"}, "whole number", id="text"),
-        pytest.param({"reading_time_minutes": True}, "whole number", id="bool-is-not-a-number"),
-        pytest.param({"reading_time_minutes": None}, "whole number", id="empty"),
-        pytest.param({"send_empty_report": "false"}, "true or false", id="text-false"),
-        pytest.param({"send_empty_report": 1}, "true or false", id="number"),
-        pytest.param({"send_empty_report": None}, "true or false", id="empty-flag"),
-    ],
-)
-def test_invalid_digest(digest, message):
-    with pytest.raises(ValueError, match=message):
-        parse_digest(digest)
-
-
-def test_invalid_digest_stops_loading_and_names_the_file(tmp_path):
-    path = write(tmp_path, PROFILE + SOURCES + "digest:\n  reading_time_minutes: 0\n")
-    with pytest.raises(ValueError, match="interests.yaml.*reading_time_minutes"):
-        load_config(path)
-
-
 # --- The real config/interests.yaml ---
 
 
@@ -251,10 +187,6 @@ class TestRealConfig:
     def test_source_names_are_unique(self, config):
         names = Counter(build_collector(source).name for source in config.sources)
         assert [name for name, count in names.items() if count > 1] == []
-
-    def test_digest_settings_are_valid(self, config):
-        assert MIN_READING_TIME_MINUTES <= config.digest.reading_time_minutes <= MAX_READING_TIME_MINUTES
-        assert isinstance(config.digest.send_empty_report, bool)
 
     def test_feeds_use_https(self, config):
         urls = [source["url"] for source in config.sources if "url" in source]

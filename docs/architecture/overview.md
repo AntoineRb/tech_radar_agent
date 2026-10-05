@@ -24,8 +24,7 @@ flowchart LR
 | Scoring: prompts and answer validation | ✅ Done | `agent/scoring.py` ([details](scoring.md)) |
 | Summary: what the article brings, links and HTML rejected | ✅ Done | `agent/summary.py` ([details](summary.md)) |
 | Agent loop: threshold, retries, storing results, wired into `main()` | ✅ Done | `agent/loop.py` ([details](agent-loop.md)) |
-| Digest: selection plumbing (`sent_at`, candidates, `digest` config) | ✅ Done | `storage/`, `config.py` ([ADR 0023](../decisions/0023-digest-selection.md)) |
-| Digest: selection, rendering, delivery | 🔜 Next | — |
+| Digest and delivery | Planned | — |
 | Feedback | Planned | — |
 
 ## Code layout
