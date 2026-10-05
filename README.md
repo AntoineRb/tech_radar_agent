@@ -1,5 +1,7 @@
 # Tech Radar Agent
 
+[![Tests](https://github.com/AntoineRb/tech_radar_agent/actions/workflows/tests.yml/badge.svg?branch=dev)](https://github.com/AntoineRb/tech_radar_agent/actions/workflows/tests.yml)
+
 > 🚧 **Work in progress.** The project is being built step by step and is not usable yet. See the [roadmap](#roadmap) for the current status.
 
 A personal tech-watch agent that scans developer news sources every day, uses an LLM to decide what is actually relevant to *you*, and delivers a short, curated digest.
@@ -38,7 +40,7 @@ flowchart LR
 | PyYAML | Interest profile and source configuration | ✅ |
 | SQLite | The agent's memory | ✅ |
 | LLM API (OpenAI-compatible, local or remote) | Relevance scoring and summarization | ✅ |
-| GitHub Actions | Daily schedule | 🔜 |
+| GitHub Actions | Tests on every pull request (✅), daily schedule (🔜) | 🚧 |
 
 ## Getting started
 

@@ -30,7 +30,16 @@ The agent reads content written by strangers, sends it to an LLM, and puts the r
   ```
 
   `pip-audit` is maintained by the Python Packaging Authority.
-- GitHub Actions: only official or widely trusted actions, pinned to a commit SHA rather than a tag.
+- GitHub Actions: only official or widely trusted actions, pinned to a commit SHA rather than a tag. Workflows get a read-only token (`permissions: contents: read`), are triggered by `pull_request` (never `pull_request_target`), and run on GitHub-hosted runners only. See [ADR 0022](decisions/0022-continuous-integration.md).
+
+### Actions in use
+
+| Action | Owner | Pinned to | Checked |
+|---|---|---|---|
+| [`actions/checkout`](https://github.com/actions/checkout) | GitHub | `3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1) | 2026-10-05: official repository, signed commit of the release tag |
+| [`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) | Astral (uv) | `c18668ad3cf93ea998bef934396af7bb5c839dc7` (v10.2.0) | 2026-10-05: official repository, signed commit of the release tag |
+
+To update one: take the new release tag, resolve it with `git ls-remote https://github.com/<owner>/<repo> refs/tags/<tag> 'refs/tags/<tag>^{}'` (the `^{}` line, when present, is the commit), check that commit on the official repository, then replace the SHA and the version comment.
 
 ### Current dependencies
 

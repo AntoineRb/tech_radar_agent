@@ -32,4 +32,4 @@ Do **not** use `git flow feature finish`, because it merges locally and skips th
 | #7 | `feature/entrypoint` | `main()` orchestration and source list |
 | #8 | `feature/unit-test` | pytest setup and tests for everything built so far |
 
-Before opening a merge request, run `uv run pytest`: every test must pass.
+Before opening a merge request, run `uv run pytest`: every test must pass. GitHub Actions runs the same tests on every pull request and push to `dev` and `main` ([CI](testing.md#continuous-integration)), and shows the result on the pull request.

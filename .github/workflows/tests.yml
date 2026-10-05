@@ -1,0 +1,44 @@
+# Runs the test suite on every pull request and push to dev and main.
+# Tests never touch the network or an LLM (see docs/development/testing.md), so no secret is needed.
+name: Tests
+
+on:
+  push:
+    branches: [dev, main]
+  # `pull_request`, never `pull_request_target`: a pull request from a fork then runs with a
+  # read-only token and no secrets, so its code cannot reach anything sensitive.
+  pull_request:
+    branches: [dev, main]
+
+# Least privilege: the workflow only needs to read the code.
+permissions:
+  contents: read
+
+# A new push to the same branch or pull request cancels the run still in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Actions are pinned to a commit SHA, not a tag: a tag can be moved to other code (docs/security.md).
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # Do not leave the token in .git/config for the next steps.
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.23" # Pinned too, for reproducible runs.
+
+      # Installs Python from .python-version, then the dependencies with the hashes from uv.lock.
+      # --locked fails the run if uv.lock is out of date with pyproject.toml.
+      - name: Install Python and dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Run the tests
+        run: uv run --locked pytest
