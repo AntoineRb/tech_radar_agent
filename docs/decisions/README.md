@@ -22,8 +22,9 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0016](0016-reader-language.md) | Instructions in English, reader-facing text in the reader's language | Accepted |
 | [0017](0017-summary-what-the-article-brings.md) | Summary: what the article brings, or nothing | Accepted |
 | [0018](0018-agent-loop-scope.md) | Agent loop scope: one command, recent articles only, capped, threshold for summaries | Accepted |
-| [0019](0019-failure-handling.md) | Failure handling in the agent loop | Accepted (implementation in progress) |
+| [0019](0019-failure-handling.md) | Failure handling in the agent loop | Accepted |
 | [0020](0020-storing-results.md) | Storing results: four new columns, the model recorded, in-place schema upgrade | Accepted |
+| [0021](0021-partial-failures-in-the-loop.md) | Partial failures in the loop: a failed summary keeps the score, a stop saves nothing | Accepted |
 
 ## Template
 

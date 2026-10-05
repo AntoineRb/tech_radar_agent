@@ -1,6 +1,6 @@
 # Testing
 
-Tests use [pytest](https://docs.pytest.org/), installed as a dev-only dependency. They run in about 0.1 s, **never touch the network**, and never touch the real `data/` folder.
+Tests use [pytest](https://docs.pytest.org/), installed as a dev-only dependency. They run in about 0.3 s, **never touch the network**, and never touch the real `data/` folder.
 
 ```bash
 uv run pytest                                          # everything
@@ -20,13 +20,14 @@ The `tests/` folder mirrors `src/tech_radar_agent/`:
 tests/
 ├── conftest.py              # shared fixtures: no_network, fake_http
 ├── test_config.py           # load_config() + checks on the real config/interests.yaml
-├── test_main.py             # main(): orchestration, failures, exit codes
+├── test_main.py             # main(): collection then scoring (fake LLM server), failures, exit codes
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary
 ├── agent/
 │   ├── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
 │   ├── test_summary.py      # parse_summary (links, HTML, false positives, hidden links), summary prompt, Summarizer
+│   ├── test_loop.py         # call_with_retry, score_and_summarize: thresholds, retries, stops, report counts
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
@@ -74,6 +75,12 @@ A route without a query string also matches requests with one. Unknown URLs get 
 ### Testing `main()`
 
 `test_main.py` registers a `FakeCollector` (`type: fake`) in `COLLECTOR_TYPES`, then runs `main()` in an empty temporary folder. This tests the orchestration without any HTTP. `caplog.set_level(logging.INFO)` is needed there, because pytest's own log handlers make `main()`'s `basicConfig()` a no-op.
+
+The scoring part runs for real (`LlmClient`, `Scorer`, `Summarizer`, the loop): the autouse `llm` fixture clears the real `LLM_*` / `AGENT_*` variables, sets test ones, and replaces `LlmClient` with one whose transport is a `FakeLlmServer`. The server answers like a well-behaved LLM (a score, or a summary, depending on the system prompt), or with `llm.status` (e.g. `401`) to simulate a failure. Use fatal statuses there, not `503`: `main()` does not inject `sleep`, so a temporary error would really wait 10 s. Retries are tested in `test_loop.py`.
+
+### Testing the agent loop
+
+`tests/agent/test_loop.py` uses a real SQLite database in `tmp_path`, `FakeScorer` / `FakeSummarizer` (a reply per article title: a result, an exception, or a list consumed one per call), and `sleep=waits.append`. Its `run()` helper checks the `LoopReport` invariants on every run.
 
 ## Rules
 

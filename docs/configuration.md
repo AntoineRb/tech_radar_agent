@@ -103,7 +103,7 @@ In CI (GitHub Actions), they come from the repository secrets.
 | `AGENT_MAX_ARTICLES_PER_RUN` | no | At most this many articles are scored per run, newest first. Default `100`. A safety cap on time and cost |
 | `AGENT_SUMMARY_THRESHOLD` | no | Articles scored at least this (0-10) get a summary. Default `8`. Scores depend on the model: retune it when changing `LLM_MODEL` |
 
-The `LLM_*` variables are read by `llm.load_llm_settings()` and the `AGENT_*` ones by `agent.settings.load_agent_settings()`. Both raise `ValueError` if a required variable is missing, if the URL is not allowed, or if a number is invalid or out of range. See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
+The `LLM_*` variables are read by `llm.load_llm_settings()` and the `AGENT_*` ones by `agent.settings.load_agent_settings()`. Both raise `ValueError` if a required variable is missing, if the URL is not allowed, or if a number is invalid or out of range. `main()` reads them **after** the collection: an invalid or missing setting skips scoring, keeps the collected articles, and ends the run with exit code `3` (see [agent loop](architecture/agent-loop.md)). See [ADR 0008](decisions/0008-llm-via-openai-compatible-api.md).
 
 ### Checking the LLM setup
 

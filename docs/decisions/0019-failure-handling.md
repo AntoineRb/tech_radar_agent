@@ -1,6 +1,6 @@
 # 0019. Failure handling in the agent loop
 
-- Status: Accepted (loop implementation in progress)
+- Status: Accepted
 - Date: 2026-10-04
 
 ## Context
