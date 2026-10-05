@@ -13,33 +13,14 @@ Every day it collects articles from Hacker News, GitHub, tech blogs and arXiv, a
 
 ## What you get every morning
 
-A digest you can scan in the time of a coffee, in your own language. This is its layout, rendered by the agent's code as Telegram shows it (the Python 3.15 entry is a real result, translated from French; the two others are illustrative):
+A digest you can scan in the time of a coffee, in your own language, right on your phone:
 
-```text
-🗞 Tech Radar · Tuesday 6 October
-3 articles · about 1 min to scan
+<p align="center">
+  <img src="docs/images/digest-telegram.jpg" width="380"
+       alt="A Tech Radar digest in Telegram on a phone. Header: Tech Radar, Tuesday 6 October, 3 articles, about 1 min to scan. Under TO READ, each entry shows a colored badge with its score (9/10, 8/10), the article title as a link, clickable hashtags such as #ai_agents and #python with the source, an italic line starting with Why, and the summary in a quote block: the first one unfolded, the second folded.">
+</p>
 
-📖 TO READ
-
-🟢 9/10 · Building a memory layer for tool-using agents
-#ai_agents #llm · huggingface-blog
-Why: Hands-on article on agent memory, a high-priority interest, with code and measurements.
-▎ Compares three ways to give an agent long-term memory (summaries, vector search,
-▎ a key-value store) on the same task, with latency and accuracy for each.        ▾
-
-🟡 8/10 · The Real Python Podcast – Episode #313: Python 3.15: Exploring the New Features
-#python · realpython
-Why: Technical article on the new features of Python 3.15, relevant for a Python developer.
-▎ The article announces the release of Python 3.15 and presents related learning
-▎ resources, including a showcase tutorial and a video course...                 ▾
-
-🔗 ALSO WORTH A LOOK
-
-🟢 9/10 · Show HN: An open-source evaluation harness for LLM agents
-#ai_agents · hackernews
-Why: Agent evaluation tool, directly in the reader's high-priority interests.
-💬 Discussion
-```
+<p align="center"><sub>Rendered by the agent and sent by its Telegram bot. The Python 3.15 entry is a real result, translated from French; the other entries are illustrative.</sub></p>
 
 - **Each title links to the article**, and Hacker News entries add a link to the discussion.
 - **The reason says why it matters to you**; the summary says what the article brings, folded until you tap it.
