@@ -88,3 +88,7 @@ See the [documentation](docs/README.md) for architecture details and design deci
 ## Background
 
 This project follows the [Hugging Face Agents Course](https://huggingface.co/learn/agents-course). It is a hands-on way to apply the core concepts (tool use, memory, the perception → decision → action loop) to a tool I actually use every day.
+
+## License
+
+[MIT](LICENSE) © 2026 Antoine ROBERT
