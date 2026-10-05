@@ -28,6 +28,7 @@ tests/
 │   ├── test_scoring.py      # parse_score (hostile answers), article message (injection), system prompt, Scorer
 │   ├── test_summary.py      # parse_summary (links, HTML, false positives, hidden links), summary prompt, Summarizer
 │   ├── test_loop.py         # call_with_retry, score_and_summarize: thresholds, retries, stops, report counts
+│   ├── test_digest.py       # reading_seconds, select_entries: costs, budget rules, selection properties
 │   └── test_agent_settings.py  # AGENT_* variables (not test_settings.py: that name is taken in llm/)
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
