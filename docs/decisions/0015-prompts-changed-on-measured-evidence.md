@@ -12,7 +12,7 @@ Prompt wording has large, non-obvious effects. Several "obvious" improvements ma
 - A prompt change is compared with the previous version **on the same articles**, real ones and crafted ones (injection, excluded topic, too-thin content, cut-off content), with simple counts: invalid answers, wrong language, scores in the expected range, spread.
 - The **why** of each section, and the measurement behind it, is kept as a comment next to the prompt.
 - **The local model is a shared resource**: qwen3.6 needs about 23 GB of RAM. Real-model checks are small (a few articles), run only when needed, and never as large batches.
-- A firmer instruction that measurably hurts a more important property is dropped (for example, a rule against "L'article…" openings that broke JSON).
+- A firmer instruction that measurably hurts a more important property is dropped (for example, a rule against "The article…" openings in French summaries that broke JSON).
 
 ## Consequences
 

@@ -14,7 +14,7 @@ Je veux **écrire le code moi-même**. C'est un projet d'apprentissage, pas un l
 - Exceptions où tu peux écrire directement : fichiers de config triviaux (`.gitignore`, `.gitkeep`, etc.), ce `CLAUDE.md`, ou quand je te le demande.
 - Une étape à la fois. Ne pars pas sur la suivante sans que je dise que c'est bon.
 - **Une question à la fois.** Quand plusieurs points sont à trancher, pose-les un par un et attends ma réponse avant le suivant.
-- Parle-moi **en français**. Code, noms, docstrings, commentaires et README **en anglais** (le repo est public). Seul ce `CLAUDE.md` reste en français.
+- Parle-moi **en français**. Code, noms, docstrings, commentaires, README et `docs/` **en anglais** (le repo est public), **y compris les exemples de sortie de l'agent** (raisons, résumés générés en français : les traduire et le signaler). Seul ce `CLAUDE.md` reste en français.
 
 ## Contexte
 
@@ -140,7 +140,7 @@ _Terminée le 2026-10-05. Écart avec le plan : le résumé dit **ce que l'artic
 
 _Dernière session : 2026-10-05._
 
-**▶️ Reprendre ici (prochaine session)** : **Soirée 2 terminée** (boucle agentique mergée dans `dev`, 633 tests, premier vrai lancement complet OK avec qwen3.6). Avant tout : `git checkout dev && git pull`. **Prochaine étape, à choisir en début de session** : (a) **Soirée 3** : colonne de statut « envoyé », digest Markdown/HTML (texte LLM échappé, liens venant de la base), envoi mail ou Discord, GitHub Actions (persistance de la base à trancher) ; ou (b) le point 1 du « niveau pro » : **jeu d'évaluation du LLM** (y inclure la fidélité des résumés). `LOOP_GUIDE.md` (ignoré par git) ne sert plus : peut être supprimé. Licence MIT ajoutée (MR #16). CI des tests ajoutée (`feature/github-actions-ci`) : ✅ 1er run vert sur GitHub (Ubuntu) le 2026-10-05. Option : rendre le check `pytest` obligatoire dans la protection de branche de `dev`/`main`.
+**▶️ Reprendre ici (prochaine session)** : **Soirée 2 terminée** (boucle agentique mergée dans `dev`, 633 tests, premier vrai lancement complet OK avec qwen3.6). Avant tout : `git checkout dev && git pull`. **Prochaine étape, à choisir en début de session** : (a) **Soirée 3** : colonne de statut « envoyé », digest Markdown/HTML (texte LLM échappé, liens venant de la base), envoi mail ou Discord, GitHub Actions (persistance de la base à trancher) ; ou (b) le point 1 du « niveau pro » : **jeu d'évaluation du LLM** (y inclure la fidélité des résumés). `LOOP_GUIDE.md` (ignoré par git) ne sert plus : peut être supprimé. Licence MIT ajoutée (MR #16). CI des tests ajoutée (`feature/github-actions-ci`) : ✅ 1er run vert sur GitHub (Ubuntu) le 2026-10-05. Option : rendre le check `pytest` obligatoire dans la protection de branche de `dev`/`main`. **Version v0.2.0** (branche `feature/readme-v0.2.0`) : README réécrit pour mettre le dépôt en valeur (exemple réel de sortie de l'agent, extrait de la boucle, choix mesurés, sécurité, limites connues, ligne sur le travail avec Claude Code, roadmap en versions v0.1.0 → v0.4.0), `pyproject.toml` passé en 0.2.0 (+ `uv.lock`). Ensuite : MR `dev` → `main` et tag `v0.2.0`.
 
 **Soirée 2 terminée le 2026-10-05** (client LLM, scoring, résumé, boucle, branchement dans `main()`). Historique :
 
