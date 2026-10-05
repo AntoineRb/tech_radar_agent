@@ -36,6 +36,16 @@ profile:
     - Funding rounds and company valuations without technical content
     - Opinion pieces with no technical substance
 
+# The daily digest. Optional: a missing key keeps its default.
+digest:
+  # Time to read the digest and decide what to open (not to read the articles), in whole minutes,
+  # from 1 to 30. The best articles go first until this time is used. Default: 5 ("a coffee").
+  # 10 during the first days: shows almost everything above the threshold, to judge the scoring.
+  reading_time_minutes: 10
+  # On a day with no article to send, send a one-line activity report (articles collected, scored,
+  # best score) instead of nothing, so silence never hides a broken run. Default: true.
+  send_empty_report: true
+
 # Where articles come from. `type` picks the collector, every other key is one of its options
 # (see docs/architecture/collectors.md). `name` is stored as the article source.
 # Security rule: official APIs and publisher feeds only, over HTTPS (see docs/security.md).

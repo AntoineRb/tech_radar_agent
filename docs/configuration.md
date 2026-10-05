@@ -69,6 +69,21 @@ Rules:
 - Only official APIs and feeds published by the publisher itself, over HTTPS. Check a new feed before adding it (it responds, has recent posts, and is served from the publisher's domain), and note the check date in the file.
 - `limit` controls the volume of each source. Keep it low for noisy feeds such as arXiv.
 
+### `digest`: how much to read each day
+
+Optional. A missing section or key keeps its default.
+
+```yaml
+digest:
+  reading_time_minutes: 5   # whole minutes, 1 to 30. Default: 5
+  send_empty_report: true   # default: true
+```
+
+- `reading_time_minutes`: the time to **read the digest and decide what to open**, not to read the articles. The best articles go in first until this time is used; an article that does not fit is skipped and competes again the next day, and the digest always holds at least one entry when there is a candidate. See [ADR 0023](decisions/0023-digest-selection.md).
+- `send_empty_report`: on a day with no article to send, send a one-line activity report (articles collected, scored, best score) instead of nothing. Silence would not tell a quiet day from a broken run, and several days just under the threshold suggest the threshold is too high.
+
+Which articles are candidates (score threshold, age window) is set by the `AGENT_*` environment variables below, since it depends on the model.
+
 ### Validation
 
 The whole configuration is checked **before any network call**. The run stops with exit code `2` in these cases:
@@ -78,7 +93,8 @@ The whole configuration is checked **before any network call**. The run stops wi
 - a YAML tag tries to build a Python object;
 - `sources` is missing or empty;
 - a source has an unknown `type` or a misspelled option;
-- two sources have the same name.
+- two sources have the same name;
+- the `digest` section has an unknown key, a reading time that is not a whole number from 1 to 30, or a `send_empty_report` that is not `true` or `false`.
 
 ## Environment variables
 
