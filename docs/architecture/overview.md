@@ -25,7 +25,8 @@ flowchart LR
 | Summary: what the article brings, links and HTML rejected | ✅ Done | `agent/summary.py` ([details](summary.md)) |
 | Agent loop: threshold, retries, storing results, wired into `main()` | ✅ Done | `agent/loop.py` ([details](agent-loop.md)) |
 | Digest: selection plumbing (`sent_at`, candidates, `digest` config) | ✅ Done | `storage/`, `config.py` ([ADR 0023](../decisions/0023-digest-selection.md)) |
-| Digest: selection, rendering, delivery | 🔜 Next | — |
+| Digest: selection within a reading-time budget | ✅ Done | `agent/digest.py` ([details](digest.md)) |
+| Digest: rendering and delivery | 🔜 Next | — |
 | Feedback | Planned | — |
 
 ## Code layout
@@ -42,6 +43,7 @@ src/tech_radar_agent/
 │   ├── scoring.py   # Scorer: prompts, LLM call, answer validation (depends on llm/, never the reverse)
 │   ├── summary.py   # Summarizer: summary prompt, LLM call, answer validation (no links, no HTML)
 │   ├── loop.py      # score_and_summarize: the agent loop, retries, stops, LoopReport
+│   ├── digest.py    # select_entries: the digest entries that fit in the reading-time budget
 │   └── settings.py  # AGENT_* variables: scoring window, cap per run, summary threshold
 ├── llm/
 │   ├── settings.py  # LLM location and tuning (LLM_* variables) from the environment

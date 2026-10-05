@@ -14,7 +14,8 @@ docs/
 │   ├── storage.md            # SQLite schema and storage API
 │   ├── scoring.md            # LLM scoring: prompts, answer validation, measurements
 │   ├── summary.md            # LLM summary: what it says, when there is none, link and HTML filter
-│   └── agent-loop.md         # the loop: scoring, summaries, retries, stops, run report, exit codes
+│   ├── agent-loop.md         # the loop: scoring, summaries, retries, stops, run report, exit codes
+│   └── digest.md             # the digest: candidates, selection within a reading-time budget
 ├── decisions/                # one file per architecture decision (ADR)
 │   └── README.md             # decision log
 └── development/
@@ -40,6 +41,7 @@ docs/
 - [Scoring](architecture/scoring.md): how the LLM rates each article against the profile, and how its answer is validated.
 - [Summary](architecture/summary.md): how the best articles get a short, faithful summary, and why some get none.
 - [Agent loop](architecture/agent-loop.md): how articles are scored, summarized and saved, and what happens when the LLM fails.
+- [Digest](architecture/digest.md): which of the day's good articles fit in the reader's reading-time budget.
 
 ## Decisions
 
