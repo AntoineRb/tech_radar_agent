@@ -11,6 +11,12 @@ DEFAULT_LANGUAGE = "English"
 # From most to least important. Also the order in which interests are listed.
 PRIORITIES = ("high", "medium", "low")
 
+# Digest: how long the reader wants to spend on it, in whole minutes.
+DEFAULT_READING_TIME_MINUTES = 5  # "The time of a coffee."
+MIN_READING_TIME_MINUTES = 1
+MAX_READING_TIME_MINUTES = 30  # Beyond that it is no longer a digest; also catches a typo like 50 for 5.
+DIGEST_KEYS = frozenset({"reading_time_minutes", "send_empty_report"})
+
 # Interest ids are what the LLM returns: short, stable, easy to copy exactly ("ai-agents", "python").
 INTEREST_ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
@@ -38,20 +44,36 @@ class Profile:
 
 
 @dataclass(frozen=True)
+class DigestSettings:
+    """What the reader wants from the digest. Preferences, so they live in the config file (ADR 0011)."""
+
+    # Time to read the digest and decide what to open, not to read the articles themselves.
+    reading_time_minutes: int = DEFAULT_READING_TIME_MINUTES
+    # On a day with no candidate, send a one-line activity report instead of nothing: silence would
+    # not tell a quiet day from a broken run.
+    send_empty_report: bool = True
+
+
+@dataclass(frozen=True)
 class Config:
     profile: Profile
     sources: list[dict[str, Any]]  # Raw entries, turned into collectors by build_collector().
+    digest: DigestSettings = DigestSettings()  # The `digest` section is optional.
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
-    """Read the YAML config (interest profile and sources) and check it entirely."""
+    """Read the YAML config (interest profile, sources, digest) and check it entirely."""
     with path.open(encoding="utf-8") as file:
         raw = yaml.safe_load(file)  # Never yaml.load: it can build arbitrary Python objects.
 
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: expected a mapping at the top level")
     try:
-        return Config(profile=parse_profile(raw.get("profile")), sources=parse_sources(raw.get("sources")))
+        return Config(
+            profile=parse_profile(raw.get("profile")),
+            sources=parse_sources(raw.get("sources")),
+            digest=parse_digest(raw.get("digest")),
+        )
     except ValueError as error:
         raise ValueError(f"{path}: {error}") from None
 
@@ -107,6 +129,33 @@ def _parse_interests(raw: Any) -> tuple[Interest, ...]:
     if not interests:
         raise ValueError("`profile.interests` must contain at least one interest")
     return tuple(interests)
+
+
+def parse_digest(raw: Any) -> DigestSettings:
+    """The optional `digest` section. A missing section or key keeps its default."""
+    if raw is None:
+        return DigestSettings()
+    if not isinstance(raw, dict):
+        raise ValueError("`digest` must be a mapping")
+    unknown = set(raw) - DIGEST_KEYS
+    if unknown:  # A misspelled key would otherwise be ignored without a word.
+        raise ValueError(f"unknown keys in `digest`: {sorted(map(str, unknown))}, expected {sorted(DIGEST_KEYS)}")
+
+    minutes = raw.get("reading_time_minutes", DEFAULT_READING_TIME_MINUTES)
+    # bool is a subclass of int in Python: `true` must not be read as 1 minute.
+    if isinstance(minutes, bool) or not isinstance(minutes, int):
+        raise ValueError(f"`digest.reading_time_minutes` must be a whole number of minutes, got {minutes!r}")
+    if not MIN_READING_TIME_MINUTES <= minutes <= MAX_READING_TIME_MINUTES:
+        raise ValueError(
+            f"`digest.reading_time_minutes` must be between {MIN_READING_TIME_MINUTES} and "
+            f"{MAX_READING_TIME_MINUTES}, got {minutes}"
+        )
+
+    send_empty_report = raw.get("send_empty_report", True)
+    if not isinstance(send_empty_report, bool):
+        raise ValueError(f"`digest.send_empty_report` must be true or false, got {send_empty_report!r}")
+
+    return DigestSettings(reading_time_minutes=minutes, send_empty_report=send_empty_report)
 
 
 def _required_text(value: Any, name: str) -> str:
