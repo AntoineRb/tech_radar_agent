@@ -101,7 +101,7 @@ The LLM client is ~260 lines of `httpx` speaking the OpenAI chat completions for
 
 ## Design choices, measured
 
-Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (27 ADRs).
+Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (28 ADRs).
 
 | Choice | Measurement |
 |---|---|
@@ -127,7 +127,7 @@ An agent that reads the web reads hostile text. The rules are in [`docs/security
 
 ## Engineering
 
-- **887 tests in ~0.5 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
+- **894 tests in ~0.5 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
 - **Tests checked by injecting bugs**: 77 bugs planted one at a time in the agent loop, `main()`, the digest selection, its rendering, the translations and the Telegram delivery (four of them reintroducing a token leak), every one caught (two only after strengthening the tests).
 - **CI** on every pull request and push, with GitHub Actions.
 - **Failure handling with clear outcomes**: one broken source never stops the others, an LLM outage never loses the day's collection, and exit codes tell CI what happened.
@@ -145,6 +145,7 @@ cp .env.example .env   # then set LLM_BASE_URL, LLM_MODEL, TELEGRAM_BOT_TOKEN an
 uv run --env-file .env tech-radar-agent              # collect, score, send the digest on Telegram
 uv run --env-file .env tech-radar-agent --dry-run    # the same, but write the digest to output/ instead of sending it
 uv run --env-file .env tech-radar-agent --preview    # only build the digest from the database: no collection, no LLM
+uv run --env-file .env tech-radar-agent --send-only  # only send the digest of what is already scored: no collection, no LLM
 ```
 
 uv installs the right Python version and every dependency from `uv.lock`. A Telegram bot takes two minutes to create with [@BotFather](https://t.me/BotFather); [configuration](docs/configuration.md#environment-variables) explains how to find your chat id. Nothing is ever lost when a step fails: without LLM settings the run still collects (exit code `3`), and without Telegram it still scores (exit code `4`), keeping the digest for the next run.
@@ -204,7 +205,7 @@ tech_radar_agent/
   - [x] Sent-item tracking, so an article is never sent twice.
   - [x] Selection within a reading-time budget: best first, nothing lost, never empty.
   - [x] Rendering in Telegram HTML, in the reader's language, everything escaped.
-  - [x] Delivery on Telegram, with `--dry-run` and `--preview`.
+  - [x] Delivery on Telegram, with `--dry-run`, `--preview` and `--send-only`.
 - [ ] **Next: a daily run** on GitHub Actions, so the digest arrives every morning on its own.
 - [ ] **v0.4.0: Feedback and adaptation.** 👍 / 👎 on digest items, feedback-aware scoring, recurring "hot topics".
 - [ ] **Alongside:** an LLM evaluation set to compare prompts and models reproducibly.
