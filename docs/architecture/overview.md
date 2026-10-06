@@ -85,7 +85,12 @@ data/                  # local SQLite database (git-ignored, kept with .gitkeep)
 6. Logs a summary: articles scored, summarized, failed, and how many are left after an early stop.
 7. Builds the [digest](digest.md): selects the best unsent articles that fit in the reading-time budget, renders them in Telegram HTML, sends them, and marks the articles of each message Telegram confirmed. A day with no candidate gets a one-line report. This runs even if scoring stopped.
 
-`--dry-run` does all of this but sends nothing and marks nothing: the digest is written to `output/digest-YYYY-MM-DD.html`. `--preview` only builds the digest from the database (no collection, no LLM call) and writes the same file. See [ADR 0027](../decisions/0027-digest-in-the-run-dry-run-and-preview.md).
+`--dry-run` does all of this but sends nothing and marks nothing: the digest is written to `output/digest-YYYY-MM-DD.html`. `--preview` only builds the digest from the database (no collection, no LLM call) and writes the same file. `--send-only` does the same but sends it and marks it, like a normal run. See [ADR 0027](../decisions/0027-digest-in-the-run-dry-run-and-preview.md) and [ADR 0028](../decisions/0028-send-only.md).
+
+| | Sent on Telegram, marked | Written to `output/`, nothing marked |
+|---|---|---|
+| Collect and score (LLM) | normal run | `--dry-run` |
+| From the database only | `--send-only` | `--preview` |
 
 A source that raises is logged with its traceback and skipped, and the other sources keep running. An LLM failure is handled by the loop: skip the article, retry, or stop scoring.
 

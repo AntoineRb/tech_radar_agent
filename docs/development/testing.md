@@ -20,7 +20,7 @@ The `tests/` folder mirrors `src/tech_radar_agent/`:
 tests/
 ├── conftest.py              # shared fixtures: no_network, fake_http
 ├── test_config.py           # load_config() + checks on the real config/interests.yaml
-├── test_main.py             # main(): collection, scoring, digest (fake LLM and Telegram servers), --dry-run, --preview, exit codes
+├── test_main.py             # main(): collection, scoring, digest (fake LLM and Telegram servers), --dry-run, --preview, --send-only, exit codes
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary

@@ -64,6 +64,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="only build the digest from what is already in the database (no collection, no LLM call), "
         "write it to output/; nothing sent or marked",
     )
+    mode.add_argument(
+        "--send-only",
+        action="store_true",
+        help="only send the digest of what is already in the database (no collection, no LLM call); "
+        "its articles are marked as sent, like in a normal run",
+    )
     return parser.parse_args(argv)
 
 
@@ -76,16 +82,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     # A config error stops the run before any network call: it has to be fixed, not skipped.
     try:
         config = load_config()
-        collectors = [] if args.preview else build_collectors(config.sources)
+        digest_only = args.preview or args.send_only  # No collection, no LLM: the digest from the database.
+        collectors = [] if digest_only else build_collectors(config.sources)
     except (OSError, ValueError, TypeError, yaml.YAMLError) as error:
         logger.error("Invalid configuration: %s", error)
         return EXIT_CONFIG_ERROR
 
     conn = connect()
     try:
-        if args.preview:  # The digest only, from what the database already holds.
-            build_and_deliver_digest(conn, config, new_articles=0, scored=0, write_only=True)
-            return EXIT_OK
+        if digest_only:
+            # This run collected and scored nothing: the report of an empty day says so (0 and 0).
+            delivered = build_and_deliver_digest(conn, config, new_articles=0, scored=0, write_only=args.preview)
+            return EXIT_OK if delivered else EXIT_DIGEST_NOT_SENT
 
         collection = collect_all(conn, collectors)
         # Scoring runs even when every source failed: articles left unscored by an earlier run still count.
