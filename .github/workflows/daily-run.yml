@@ -1,0 +1,105 @@
+# Runs the agent once a day: collect, score with a remote LLM, send the digest on Telegram (ADR 0030).
+# The SQLite database is the agent's memory (what it has seen, scored and sent). A runner starts
+# empty, so the database travels from one run to the next as an artifact.
+name: Daily run
+
+on:
+  schedule:
+    # 06:17 UTC: 08:17 in Paris in summer, 07:17 in winter (cron is in UTC, with no daylight saving).
+    # Not on the hour: scheduled runs start late when GitHub is busy, most of all at :00.
+    - cron: "17 6 * * *"
+  # A "Run workflow" button in the Actions tab, for a run on demand.
+  workflow_dispatch:
+
+# Least privilege. contents: read to check out the code; actions: read to find and download the
+# database saved by an earlier run. Uploading an artifact needs no permission.
+permissions:
+  contents: read
+  actions: read
+
+# Never two runs at once: both would start from the same database, and the second upload would erase
+# what the first one sent and marked. A run waits for the one in progress, and is never cancelled
+# halfway (it may be sending the digest).
+concurrency:
+  group: daily-run
+  cancel-in-progress: false
+
+env:
+  DB_ARTIFACT: tech-radar-db
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # A normal run takes ~5 min (mostly the pacing between LLM requests). Stops a stuck run long
+    # before GitHub's 6 h limit.
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned to a commit SHA, not a tag: a tag can be moved to other code (docs/security.md).
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false # Do not leave the token in .git/config for the next steps.
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.23" # Pinned too, for reproducible runs.
+
+      # Runtime dependencies only: the tests run in tests.yml.
+      - name: Install Python and dependencies
+        run: uv sync --locked --no-dev
+
+      # The newest database saved by this repository's own runs on the default branch. Artifacts
+      # uploaded by a pull request from a fork are skipped: anyone can open one, and a crafted
+      # database could inject links into the digest or mark every article as sent.
+      - name: Restore the database of the previous run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=$DB_ARTIFACT&per_page=100" --jq '
+            [.artifacts[]
+              | select(.expired | not)
+              | select(.workflow_run.head_repository_id == .workflow_run.repository_id)
+              | select(.workflow_run.head_branch == env.DEFAULT_BRANCH)]
+            | sort_by(.created_at) | last | .workflow_run.id // empty')
+          if [ -z "$run_id" ]; then
+            # First run, or no run for 90 days: the agent starts with an empty memory.
+            echo "::notice::No saved database found: starting with an empty one."
+            exit 0
+          fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "$DB_ARTIFACT" --dir data
+          test -s data/tech_radar.db # Fail rather than run without memory: it would send articles again.
+          echo "Database restored from run $run_id."
+
+      # Fails the job on exit codes 1, 3 and 4 (docs/configuration.md): GitHub then emails a failure
+      # notice, which is the alert when the digest did not go out. Secrets are given to this step
+      # only, never to the whole job.
+      - name: Run the agent
+        id: agent
+        env:
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_REASONING_EFFORT: ${{ vars.LLM_REASONING_EFFORT }}
+          LLM_REQUEST_TIMEOUT: ${{ vars.LLM_REQUEST_TIMEOUT }}
+          LLM_MIN_INTERVAL_SECONDS: ${{ vars.LLM_MIN_INTERVAL_SECONDS }}
+          AGENT_MAX_ARTICLES_PER_RUN: ${{ vars.AGENT_MAX_ARTICLES_PER_RUN }}
+          AGENT_SUMMARY_THRESHOLD: ${{ vars.AGENT_SUMMARY_THRESHOLD }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ github.token }} # Higher GitHub search rate limit for the collectors.
+        run: uv run --locked --no-dev tech-radar-agent
+
+      # Saved even when the agent failed: a run that sent part of the digest has marked those
+      # articles, and losing that would send them again. Skipped only when the agent did not run
+      # (e.g. the restore failed): uploading then would replace the memory with an empty database.
+      - name: Save the database for the next run
+        if: ${{ !cancelled() && steps.agent.outcome != 'skipped' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.DB_ARTIFACT }}
+          path: data/tech_radar.db
+          retention-days: 90 # One database per run, kept 90 days: the history of what the agent did.
+          if-no-files-found: error
