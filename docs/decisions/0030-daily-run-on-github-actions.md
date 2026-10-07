@@ -10,6 +10,7 @@ The agent has to run every morning without a machine of its own. GitHub Actions 
 ## Decision
 
 - **The public repository runs the workflow** (`.github/workflows/daily-run.yml`), rather than a separate private one: it shows the deployment next to the code. At INFO level the logs hold only counts (articles per source, scored, sent), and the interest profile is already public.
+- **A release runs in production, not the work in progress**: the checkout takes a tag (`ref: v0.3.1`), because a scheduled run always starts from the default branch, `dev`. Deploying a new release, or rolling back, is a one-line change, reviewed in a pull request. A tag rather than `main`: production does not change at the moment of a merge, nor after a merge into `main` by mistake.
 - **The LLM is remote**: Gemini through Google AI Studio's OpenAI-compatible API, free tier, with `LLM_MIN_INTERVAL_SECONDS` ([ADR 0029](0029-llm-request-pacing.md)) for the per-minute quota and `AGENT_MAX_ARTICLES_PER_RUN=12` for the daily one. Changing provider (paid tier, GitHub Models) only changes repository variables.
 - **The database is kept as an artifact**, one per run, for 90 days, rather than in the Actions cache (best effort, evicted after 7 days without access, keys that cannot be overwritten) or committed to the repository (a binary file growing the history every day). Each day's database can be downloaded, which gives a history of the agent's work.
 - **Restored from the newest artifact of this repository's runs on the default branch**, whatever the run's conclusion. A run that failed after sending part of the digest has marked those articles, and its database is the right one. Artifacts from forks or other branches are skipped. No artifact: the agent starts with an empty database. Any other restore error fails the job, rather than running without memory.
@@ -23,5 +24,6 @@ The agent has to run every morning without a machine of its own. GitHub Actions 
 
 - Anyone signed in to GitHub can download the database artifacts of a public repository: public articles, their scores, reasons and sending dates. Nothing secret, but not private either. Moving to a private repository would change that, at the cost of a free-plan limit on Actions minutes.
 - With the free tier, only the 12 newest articles are scored each day, out of about 100 collected. The others leave the 3-day window unscored.
-- The workflow only appears in the Actions tab once it is on the default branch, so its first run follows the merge.
+- The workflow only appears in the Actions tab once it is on the default branch, so its first run follows the merge, and the release whose tag it checks out.
+- The code, `uv.lock` and `config/interests.yaml` come from the tag: a change to the interest profile reaches production with the next release. The workflow file itself is read from `dev`, and a change to it applies at once.
 - GitHub disables the schedule of a public repository after 60 days without activity.

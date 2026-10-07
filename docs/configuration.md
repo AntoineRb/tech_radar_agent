@@ -160,7 +160,7 @@ Set the provider's OpenAI-compatible base URL (HTTPS), the model name and the AP
 
 ## Daily run on GitHub Actions
 
-[`.github/workflows/daily-run.yml`](../.github/workflows/daily-run.yml) runs the agent every day at 06:17 UTC (08:17 in Paris in summer, 07:17 in winter), and on demand from the Actions tab ("Run workflow"). The database travels from one run to the next as an artifact named `tech-radar-db`, kept 90 days per run. See [ADR 0030](decisions/0030-daily-run-on-github-actions.md).
+[`.github/workflows/daily-run.yml`](../.github/workflows/daily-run.yml) runs the agent every day at 06:17 UTC (08:17 in Paris in summer, 07:17 in winter), and on demand from the Actions tab ("Run workflow"). The database travels from one run to the next as an artifact named `tech-radar-db`, kept 90 days per run. It runs a **release**, not `dev`: the `ref:` of the checkout step names the tag (`v0.3.1`). To deploy a new release or roll back, change that line. See [ADR 0030](decisions/0030-daily-run-on-github-actions.md).
 
 Set these in the repository, under **Settings → Secrets and variables → Actions**:
 

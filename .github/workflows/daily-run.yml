@@ -35,9 +35,14 @@ jobs:
     timeout-minutes: 30
     steps:
       # Actions are pinned to a commit SHA, not a tag: a tag can be moved to other code (docs/security.md).
-      - name: Check out the code
+      - name: Check out the released code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The release that runs in production. A schedule always starts from the default branch
+          # (dev), so without this the work in progress would run. Code, uv.lock and
+          # config/interests.yaml come from this tag; this workflow file comes from dev.
+          # To deploy a new release, or roll back: change this line.
+          ref: v0.3.1
           persist-credentials: false # Do not leave the token in .git/config for the next steps.
 
       - name: Install uv
