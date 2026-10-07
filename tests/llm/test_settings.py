@@ -3,9 +3,10 @@ from pathlib import Path
 import pytest
 
 from tech_radar_agent.llm import LlmSettings, is_allowed_llm_url, load_llm_settings
-from tech_radar_agent.llm.settings import DEFAULT_REQUEST_TIMEOUT
+from tech_radar_agent.llm.settings import DEFAULT_REQUEST_TIMEOUT, MAX_MIN_INTERVAL
 
 ENV_EXAMPLE = Path(__file__).parents[2] / ".env.example"
+LOCAL = {"LLM_BASE_URL": "http://localhost:11434/v1", "LLM_MODEL": "m"}
 
 
 class TestLoad:
@@ -84,6 +85,35 @@ class TestLoad:
                 {"LLM_BASE_URL": "http://localhost:11434/v1", "LLM_MODEL": "m", "LLM_REQUEST_TIMEOUT": value}
             )
 
+    @pytest.mark.parametrize("value", [None, "", "   "])
+    def test_no_min_interval_by_default(self, value):
+        environ = LOCAL if value is None else LOCAL | {"LLM_MIN_INTERVAL_SECONDS": value}
+        assert load_llm_settings(environ).min_interval == 0.0
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("0", 0.0), ("6", 6.0), (" 4.5 ", 4.5), ("300", MAX_MIN_INTERVAL)],  # Both bounds included.
+    )
+    def test_min_interval_from_environment(self, value, expected):
+        assert load_llm_settings(LOCAL | {"LLM_MIN_INTERVAL_SECONDS": value}).min_interval == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "abc",
+            "6s",  # The unit is in the name, not the value.
+            "-1",
+            "300.01",
+            "6000",  # Milliseconds by mistake: would wait 100 min per request.
+            "nan",
+            "inf",
+            "-inf",
+        ],
+    )
+    def test_invalid_min_interval(self, value):
+        with pytest.raises(ValueError, match="LLM_MIN_INTERVAL_SECONDS"):
+            load_llm_settings(LOCAL | {"LLM_MIN_INTERVAL_SECONDS": value})
+
     def test_reads_the_process_environment_by_default(self, monkeypatch):
         monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:11434/v1")
         monkeypatch.setenv("LLM_MODEL", "m")
@@ -112,6 +142,7 @@ class TestSecrets:
         settings = load_llm_settings(environ)
         assert settings.is_local
         assert settings.reasoning_effort == "none"
+        assert settings.min_interval == 0.0  # No pacing for a local model.
 
 
 class TestAllowedUrl:

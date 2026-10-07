@@ -60,6 +60,7 @@ The [client](../decisions/0012-llm-client-contract.md) classifies errors; the lo
 - A **stop** saves nothing for the article it happened on, even during its summary. The article stays unscored and is processed again, from scratch, at the next run. This costs one extra scoring call after an outage, and needs no extra column or query: `fetch_articles_to_score` already picks it up.
 - Only **scoring** failures count towards the 5 in a row. A broken summary prompt would not stop the run, but it shows in `summary_failed` and in the warnings.
 - `Retry-After` is capped because the server is not a trusted source: `Retry-After: 86400` must not block the run for a day.
+- The loop does not space its requests: `LlmClient` does it for every request, retries included, when `LLM_MIN_INTERVAL_SECONDS` is set ([ADR 0029](../decisions/0029-llm-request-pacing.md)). Without it, a per-minute quota would turn every request of a run into a 429.
 - Log lines name the article and the error, for example `Scoring failed for 'Faster JSON parsing': ScoreValidationError (LLM answer is not valid JSON)`. Error messages never echo the LLM answer, so they are safe to log.
 
 ## Run report

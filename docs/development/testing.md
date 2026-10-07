@@ -37,7 +37,7 @@ tests/
 │   └── test_labels.py       # every language file against the label contract, language lookup, English fallback, placeholder safety
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
-│   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
+│   ├── test_client.py       # LlmClient: request body, response validation, errors, pacing, with-block, key never logged
 │   └── test_cli.py          # python -m tech_radar_agent.llm (setup check command)
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
@@ -72,7 +72,7 @@ A route without a query string also matches requests with one. Unknown URLs get 
 
 ### Testing the LLM client
 
-`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed.
+`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed. The pacing tests build the client with `paced_client(server, clock, …)`: a `FakeClock` that only moves when the client sleeps or a request "takes" time, so `clock.sleeps` and `clock.sent_at` show every wait and every request time without ever waiting. Checked by injecting 12 bugs into the pacing code and its setting (fixed pause instead of start to start, wall clock, failed request not counted, slot taken by a refused option, bounds…): each one makes at least one test fail.
 
 ### Testing the scoring
 

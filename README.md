@@ -101,7 +101,7 @@ The LLM client is ~260 lines of `httpx` speaking the OpenAI chat completions for
 
 ## Design choices, measured
 
-Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (28 ADRs).
+Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (29 ADRs).
 
 | Choice | Measurement |
 |---|---|
@@ -127,7 +127,7 @@ An agent that reads the web reads hostile text. The rules are in [`docs/security
 
 ## Engineering
 
-- **894 tests in ~0.5 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
+- **924 tests in ~0.5 s**, with no network and no LLM: fake HTTP servers, a fake LLM server, and hostile inputs (XXE feeds, `javascript:` links, prompt injection, links hidden by invisible characters, HTML injected into digest entries).
 - **Tests checked by injecting bugs**: 77 bugs planted one at a time in the agent loop, `main()`, the digest selection, its rendering, the translations and the Telegram delivery (four of them reintroducing a token leak), every one caught (two only after strengthening the tests).
 - **CI** on every pull request and push, with GitHub Actions.
 - **Failure handling with clear outcomes**: one broken source never stops the others, an LLM outage never loses the day's collection, and exit codes tell CI what happened.

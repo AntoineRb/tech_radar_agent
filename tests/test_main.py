@@ -279,6 +279,7 @@ def test_second_run_scores_nothing_again(llm):
         ("LLM_BASE_URL", None),  # Not configured at all.
         ("LLM_BASE_URL", "http://llm.example.com/v1"),  # Plain http to a remote host: refused.
         ("AGENT_SUMMARY_THRESHOLD", "eight"),
+        ("LLM_MIN_INTERVAL_SECONDS", "6000"),  # Milliseconds by mistake: refused, not hours of waiting.
     ],
 )
 def test_invalid_settings_skip_scoring_but_keep_the_collection(llm, monkeypatch, caplog, variable, value):
