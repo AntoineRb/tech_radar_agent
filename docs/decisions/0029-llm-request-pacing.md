@@ -5,7 +5,7 @@
 
 ## Context
 
-The daily run will go to GitHub Actions, where the local model cannot run: it needs a remote LLM API. Free tiers limit the number of requests per minute (RPM) and per day (RPD). On Google AI Studio, the Gemini models we tried allow 5 to 10 requests per minute and 20 per day.
+The daily run will go to GitHub Actions, where the local model cannot run: it needs a remote LLM API. Free tiers limit the number of requests per minute (RPM) and per day (RPD). On Google AI Studio's free tier, Gemini 3.8 Flash and 2.5 Flash-Lite allow 5 to 10 requests per minute and 20 per day; Gemini 3.1 Flash-Lite, the model we kept, allows 15 per minute and 500 per day.
 
 A run sends its requests back to back: one per article scored, one more per summary. The retries of [ADR 0019](0019-failure-handling.md) (2 s, then 8 s) cannot outlast a per-minute limit: a run over the limit would fail every request until it stops.
 

@@ -30,9 +30,10 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
-    # A normal run takes ~5 min (mostly the pacing between LLM requests). Stops a stuck run long
-    # before GitHub's 6 h limit.
-    timeout-minutes: 30
+    # A normal run takes 5 to 15 min (~130 LLM requests, plus the pacing on a free tier). A slow
+    # provider (~25 s per request) could take most of an hour: a timeout cancels the job, and a
+    # cancelled job does not save the database. Still stops a stuck run long before GitHub's 6 h limit.
+    timeout-minutes: 60
     steps:
       # Actions are pinned to a commit SHA, not a tag: a tag can be moved to other code (docs/security.md).
       - name: Check out the released code
