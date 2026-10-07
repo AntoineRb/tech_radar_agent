@@ -16,6 +16,7 @@ Response (what comes back, trimmed):
 import logging
 import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -80,16 +81,31 @@ class LlmClient:
             text = llm.chat([{"role": "user", "content": "Hello"}])
     """
 
-    def __init__(self, settings: LlmSettings, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        settings: LlmSettings,
+        transport: httpx.BaseTransport | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         """
         Args:
             settings: base_url, model, api_key (already validated: https, or http on localhost only),
-                reasoning_effort (str or None), request_timeout (float, in seconds).
+                reasoning_effort (str or None), request_timeout and min_interval (floats, in seconds).
             transport: None in real use. In tests, an httpx.MockTransport (a fake server).
+            clock, sleep: used to space the requests (min_interval). Replaced in tests, so that they
+                never really wait.
         """
         # What chat() needs on every call.
         self._model = settings.model
         self._reasoning_effort = settings.reasoning_effort
+
+        # Pacing (ADR 0029). A monotonic clock: the wall clock can jump back (e.g. NTP sync).
+        self._min_interval = settings.min_interval
+        self._clock = clock
+        self._sleep = sleep
+        self._last_request_at: float | None = None  # Clock time when the previous request was sent.
 
         # One HTTP client for the whole run: it keeps the connection open between calls.
         # The API key only lives in this header: never in an attribute or a log.
@@ -117,6 +133,9 @@ class LlmClient:
         # Built before the `try`: a reserved option is a caller bug, not an LLM failure,
         # so it must not become an LlmError.
         body = self._build_body(messages, options)
+
+        # After the body is built: a refused option sends nothing, so it must not use up a slot.
+        self._wait_for_slot()
 
         # --- 1. Send the request: every network and HTTP error becomes an LlmError ---
         # Measured here rather than with response.elapsed, which is not available with every transport.
@@ -189,6 +208,20 @@ class LlmClient:
             usage.get("completion_tokens"),
         )
         return content
+
+    def _wait_for_slot(self) -> None:
+        """Wait until min_interval seconds have passed since the previous request was sent (ADR 0029).
+
+        Measured from start to start, like a provider counts requests per minute: a request that took
+        longer than the interval is followed at once. Every request counts, a failed one too (the
+        server may have counted it), and retries go through here like any other request.
+        """
+        if self._min_interval and self._last_request_at is not None:
+            wait = self._last_request_at + self._min_interval - self._clock()
+            if wait > 0:
+                logger.debug("Waiting %.1fs before the next LLM request (LLM_MIN_INTERVAL_SECONDS)", wait)
+                self._sleep(wait)
+        self._last_request_at = self._clock()
 
     def _build_body(self, messages: list[Message], options: dict[str, Any]) -> dict[str, Any]:
         """Assemble the JSON request body: model + messages + reasoning_effort + options."""

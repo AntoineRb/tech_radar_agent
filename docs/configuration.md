@@ -125,6 +125,7 @@ In CI (GitHub Actions), they come from the repository secrets.
 | `LLM_API_KEY` | remote APIs | Secret key. Leave it empty for a local model |
 | `LLM_REASONING_EFFORT` | no | Sent as `reasoning_effort` in every request. `none` turns off a model's thinking phase (qwen3.6 in Ollama: ~0.3 s instead of ~18 s per call). Leave it empty if the server rejects the field |
 | `LLM_REQUEST_TIMEOUT` | no | Seconds for one LLM call, default `30`. A local model's first call loads it into memory (~20 s) |
+| `LLM_MIN_INTERVAL_SECONDS` | no | Minimum seconds between the starts of two LLM requests, retries included. Default `0` (no wait), from 0 to 300. For a per-minute quota: `60 / requests per minute` plus a margin (10 per minute → `7`). It does not help with a daily quota: lower `AGENT_MAX_ARTICLES_PER_RUN` instead. See [ADR 0029](decisions/0029-llm-request-pacing.md) |
 | `GITHUB_TOKEN` | no | Higher GitHub search rate limit. Set automatically in GitHub Actions |
 | `TELEGRAM_BOT_TOKEN` | to send the digest | Bot token from [@BotFather](https://t.me/BotFather) (`/newbot`). Secret: it gives full control of the bot |
 | `TELEGRAM_CHAT_ID` | to send the digest | Your private chat id, a positive number. Send `/start` to your bot once, then read `message.chat.id` from `https://api.telegram.org/bot<TOKEN>/getUpdates`. Groups and channels (negative ids) are refused |
