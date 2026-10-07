@@ -9,7 +9,7 @@
 
 Every day it collects articles from Hacker News, GitHub, tech blogs and arXiv, asks an LLM to judge each one against your interest profile, summarizes the best, and fits them into the time you have. It is written **from scratch, without any agent framework**: no LangChain, no CrewAI, no SDK. The whole agent loop is one readable file, every design choice is documented, and the key ones are measured.
 
-> **Status.** v0.2.0 is released: collection, LLM scoring and summaries work end to end, with a local model ([Ollama](https://ollama.com)) or any OpenAI-compatible API. v0.3.0: the digest is selected, rendered and sent on Telegram (below). **Next: running it every morning** on GitHub Actions.
+> **Status.** v0.2.0 is released: collection, LLM scoring and summaries work end to end, with a local model ([Ollama](https://ollama.com)) or any OpenAI-compatible API. v0.3.0: the digest is selected, rendered and sent on Telegram (below). v0.3.1: it **runs every morning on GitHub Actions**, with a remote LLM, and keeps its memory between runs.
 
 ## What you get every morning
 
@@ -192,7 +192,7 @@ tech_radar_agent/
 
 ## Known limitations
 
-- The digest is sent when you run the agent: the daily schedule on GitHub Actions comes next.
+- On a free LLM tier (about 20 requests a day), the daily run scores only the 12 newest articles out of about 100 collected.
 - Summary faithfulness is not measured yet. In the example above, "Python 3.15 is (almost) here" became "announces the release". An evaluation set is planned.
 - Articles without text (many Hacker News links) are judged on their title, source and domain only.
 - Deduplication is by URL: the same story on two sites is not merged yet.
@@ -206,7 +206,7 @@ tech_radar_agent/
   - [x] Selection within a reading-time budget: best first, nothing lost, never empty.
   - [x] Rendering in Telegram HTML, in the reader's language, everything escaped.
   - [x] Delivery on Telegram, with `--dry-run`, `--preview` and `--send-only`.
-- [ ] **Next: a daily run** on GitHub Actions, so the digest arrives every morning on its own.
+- [x] **v0.3.1: A daily run** on GitHub Actions, so the digest arrives every morning on its own: a release tag in production, the database kept between runs as an artifact, LLM requests paced for free-tier quotas.
 - [ ] **v0.4.0: Feedback and adaptation.** 👍 / 👎 on digest items, feedback-aware scoring, recurring "hot topics".
 - [ ] **Alongside:** an LLM evaluation set to compare prompts and models reproducibly.
 
