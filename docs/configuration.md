@@ -164,7 +164,7 @@ Set the provider's OpenAI-compatible base URL (HTTPS), the model name and the AP
 
 Set these in the repository, under **Settings → Secrets and variables → Actions**:
 
-| Kind | Name | Example (Gemini free tier, Google AI Studio) |
+| Kind | Name | Example (Gemini 3.1 Flash-Lite, Google AI Studio) |
 |---|---|---|
 | Secret | `LLM_API_KEY` | an API key from a project used only by this workflow |
 | Secret | `TELEGRAM_BOT_TOKEN` | the bot token |
@@ -173,8 +173,8 @@ Set these in the repository, under **Settings → Secrets and variables → Acti
 | Variable | `LLM_MODEL` | `gemini-3.1-flash-lite` |
 | Variable | `LLM_REASONING_EFFORT` | `minimal` |
 | Variable | `LLM_REQUEST_TIMEOUT` | `60` (the free tier sometimes takes ~25 s) |
-| Variable | `LLM_MIN_INTERVAL_SECONDS` | `13` (60 / 5 requests per minute, plus a margin) |
-| Variable | `AGENT_MAX_ARTICLES_PER_RUN` | `12` (fits a quota of 20 requests a day, summaries and retries included) |
+| Variable | `LLM_MIN_INTERVAL_SECONDS` | `5` on the free tier (60 / 15 requests per minute, plus a margin); `0` on paid tier 1 (about 4,000 per minute) |
+| Variable | `AGENT_MAX_ARTICLES_PER_RUN` | `100` (about 130 requests a run with summaries: within the free tier's 500 a day). With a quota of 20 requests a day, as on some other free models: `12` |
 | Variable | `AGENT_SUMMARY_THRESHOLD` | `8` |
 
 An unset variable is passed as an empty value, which means the default. `GITHUB_TOKEN` is provided by Actions.

@@ -192,7 +192,7 @@ tech_radar_agent/
 
 ## Known limitations
 
-- On a free LLM tier (about 20 requests a day), the daily run scores only the 12 newest articles out of about 100 collected.
+- On a free LLM tier, the daily quota decides how many articles are scored: Gemini 3.1 Flash-Lite's free tier (15 requests a minute, 500 a day) scores them all, at about 5 s per request; others allow 20 requests a day, about 12 articles.
 - Summary faithfulness is not measured yet. In the example above, "Python 3.15 is (almost) here" became "announces the release". An evaluation set is planned.
 - Articles without text (many Hacker News links) are judged on their title, source and domain only.
 - Deduplication is by URL: the same story on two sites is not merged yet.
