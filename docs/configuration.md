@@ -157,3 +157,29 @@ Smaller models are faster but judge less reliably and return invalid JSON more o
 ### Remote API
 
 Set the provider's OpenAI-compatible base URL (HTTPS), the model name and the API key. Check the provider's documentation to confirm it supports the OpenAI chat completions format.
+
+## Daily run on GitHub Actions
+
+[`.github/workflows/daily-run.yml`](../.github/workflows/daily-run.yml) runs the agent every day at 06:17 UTC (08:17 in Paris in summer, 07:17 in winter), and on demand from the Actions tab ("Run workflow"). The database travels from one run to the next as an artifact named `tech-radar-db`, kept 90 days per run. It runs a **release**, not `dev`: the `ref:` of the checkout step names the tag (`v0.3.1`). To deploy a new release or roll back, change that line. See [ADR 0030](decisions/0030-daily-run-on-github-actions.md).
+
+Set these in the repository, under **Settings → Secrets and variables → Actions**:
+
+| Kind | Name | Example (Gemini free tier, Google AI Studio) |
+|---|---|---|
+| Secret | `LLM_API_KEY` | an API key from a project used only by this workflow |
+| Secret | `TELEGRAM_BOT_TOKEN` | the bot token |
+| Secret | `TELEGRAM_CHAT_ID` | your private chat id |
+| Variable | `LLM_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| Variable | `LLM_MODEL` | `gemini-3.1-flash-lite` |
+| Variable | `LLM_REASONING_EFFORT` | `minimal` |
+| Variable | `LLM_REQUEST_TIMEOUT` | `60` (the free tier sometimes takes ~25 s) |
+| Variable | `LLM_MIN_INTERVAL_SECONDS` | `13` (60 / 5 requests per minute, plus a margin) |
+| Variable | `AGENT_MAX_ARTICLES_PER_RUN` | `12` (fits a quota of 20 requests a day, summaries and retries included) |
+| Variable | `AGENT_SUMMARY_THRESHOLD` | `8` |
+
+An unset variable is passed as an empty value, which means the default. `GITHUB_TOKEN` is provided by Actions.
+
+- **Quotas are counted per project**, and a daily quota resets at midnight Pacific time (07:00 or 08:00 UTC). A key shared with local tests would spend the next morning's run quota: give the workflow its own project and key.
+- **A failed run** (exit code 1, 3 or 4) turns the job red and GitHub emails you. The database is saved anyway, so the articles that were sent stay marked.
+- **The first run** finds no saved database and starts with an empty one.
+- GitHub disables the schedule of a public repository after 60 days without activity on it, and emails before doing so.

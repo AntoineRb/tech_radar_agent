@@ -33,6 +33,7 @@ Each file records one architecture decision: its context, the choice made, and i
 | [0027](0027-digest-in-the-run-dry-run-and-preview.md) | The digest in every run: --dry-run, --preview, and exit code 4 | Accepted |
 | [0028](0028-send-only.md) | --send-only: send the digest from the database, without collecting or scoring | Accepted |
 | [0029](0029-llm-request-pacing.md) | Pacing the LLM requests: LLM_MIN_INTERVAL_SECONDS | Accepted |
+| [0030](0030-daily-run-on-github-actions.md) | Daily run on GitHub Actions, the database kept as an artifact | Accepted |
 
 ## Template
 

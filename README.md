@@ -101,7 +101,7 @@ The LLM client is ~260 lines of `httpx` speaking the OpenAI chat completions for
 
 ## Design choices, measured
 
-Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (29 ADRs).
+Each choice was tested against a real model before being kept. Details are in the [decision log](docs/decisions/README.md) (30 ADRs).
 
 | Choice | Measurement |
 |---|---|
