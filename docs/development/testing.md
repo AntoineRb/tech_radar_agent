@@ -20,7 +20,7 @@ The `tests/` folder mirrors `src/tech_radar_agent/`:
 tests/
 ├── conftest.py              # shared fixtures: no_network, fake_http
 ├── test_config.py           # load_config() + checks on the real config/interests.yaml
-├── test_main.py             # main(): collection, scoring, digest (fake LLM and Telegram servers), --dry-run, --preview, exit codes
+├── test_main.py             # main(): collection, scoring, digest (fake LLM and Telegram servers), --dry-run, --preview, --send-only, exit codes
 ├── test_models.py           # normalize_url, Article (defaults, validation, cleaning)
 ├── test_sanitize.py         # clean_text, is_safe_url
 ├── test_storage.py          # connect (schema upgrade), save_articles, fetch_articles_to_score, save_score/summary
@@ -37,7 +37,7 @@ tests/
 │   └── test_labels.py       # every language file against the label contract, language lookup, English fallback, placeholder safety
 ├── llm/
 │   ├── test_settings.py     # environment variables, localhost-only http, secret handling
-│   ├── test_client.py       # LlmClient: request body, response validation, errors, with-block, key never logged
+│   ├── test_client.py       # LlmClient: request body, response validation, errors, pacing, with-block, key never logged
 │   └── test_cli.py          # python -m tech_radar_agent.llm (setup check command)
 └── collectors/
     ├── test_base.py         # fetch (HTTPS only, size limit, redirects), html_to_text, Collector
@@ -72,7 +72,7 @@ A route without a query string also matches requests with one. Unknown URLs get 
 
 ### Testing the LLM client
 
-`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed.
+`tests/llm/test_client.py` has its own small `FakeLlm` server (`server` fixture). Set `server.reply` to a response body (dict), an `httpx.Response` or an exception, call `server.client(**settings)`, then inspect `server.requests` / `server.last_body`. No Ollama or API is needed. The pacing tests build the client with `paced_client(server, clock, …)`: a `FakeClock` that only moves when the client sleeps or a request "takes" time, so `clock.sleeps` and `clock.sent_at` show every wait and every request time without ever waiting. Checked by injecting 12 bugs into the pacing code and its setting (fixed pause instead of start to start, wall clock, failed request not counted, slot taken by a refused option, bounds…): each one makes at least one test fail.
 
 ### Testing the scoring
 

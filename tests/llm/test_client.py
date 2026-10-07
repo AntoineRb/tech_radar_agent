@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -378,3 +379,123 @@ def test_error_categories_are_llm_errors():
     # `except LlmError` still catches everything.
     assert issubclass(LlmTemporaryError, LlmError)
     assert issubclass(LlmFatalError, LlmError)
+
+
+# --- Pacing: LLM_MIN_INTERVAL_SECONDS (ADR 0029) ---
+
+
+class FakeClock:
+    """A clock that only moves when told: sleep() moves it forward, as a real wait would. Never waits."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.sleeps: list[float] = []  # Every wait asked by the client.
+        self.sent_at: list[float] = []  # Clock time at which each request reached the server.
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
+def paced_client(server: FakeLlm, clock: FakeClock, interval: float = 6.0, request_seconds: float = 0.0) -> LlmClient:
+    """A client spacing its requests by `interval`; each request takes `request_seconds` on the fake clock."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        clock.sent_at.append(clock.now)
+        clock.now += request_seconds
+        return server.handle(request)
+
+    settings = LlmSettings(base_url=BASE_URL, model="test-model", min_interval=interval)
+    return LlmClient(settings, transport=httpx.MockTransport(handle), clock=clock, sleep=clock.sleep)
+
+
+def test_first_request_never_waits(server, clock):
+    paced_client(server, clock).chat(MESSAGES)
+    assert clock.sleeps == []
+
+
+def test_back_to_back_requests_wait_the_whole_interval(server, clock):
+    client = paced_client(server, clock)
+    client.chat(MESSAGES)
+    client.chat(MESSAGES)
+    assert clock.sleeps == [pytest.approx(6.0)]
+
+
+def test_interval_is_measured_from_start_to_start(server, clock):
+    # The first request took 4 s: only the 2 s left are waited.
+    client = paced_client(server, clock, request_seconds=4.0)
+    client.chat(MESSAGES)
+    client.chat(MESSAGES)
+    assert clock.sleeps == [pytest.approx(2.0)]
+
+
+@pytest.mark.parametrize("request_seconds", [6.0, 26.5])  # Exactly the interval, then longer (slow free tier).
+def test_a_slow_request_is_followed_at_once(server, clock, request_seconds):
+    client = paced_client(server, clock, request_seconds=request_seconds)
+    client.chat(MESSAGES)
+    client.chat(MESSAGES)
+    assert clock.sleeps == []
+
+
+def test_time_spent_by_the_caller_counts(server, clock):
+    client = paced_client(server, clock)
+    client.chat(MESSAGES)
+    clock.now += 10  # e.g. the loop saving a score.
+    client.chat(MESSAGES)
+    assert clock.sleeps == []
+
+
+def test_requests_reach_the_server_spaced_by_the_interval(server, clock):
+    client = paced_client(server, clock, request_seconds=1.5)
+    for _ in range(5):
+        client.chat(MESSAGES)
+    gaps = [later - earlier for earlier, later in zip(clock.sent_at, clock.sent_at[1:])]
+    assert gaps == [pytest.approx(6.0)] * 4  # Never closer, and no time lost either.
+
+
+def test_zero_interval_never_waits(server, clock):
+    client = paced_client(server, clock, interval=0.0)
+    for _ in range(3):
+        client.chat(MESSAGES)
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [httpx.Response(429), httpx.Response(500), httpx.ReadTimeout("timed out"), answer(content="")],
+    ids=["rate-limited", "server-error", "timeout", "empty-answer"],
+)
+def test_a_failed_request_counts_too(server, clock, failure):
+    # The server may have counted it against the quota, and the retry that follows must be spaced too.
+    client = paced_client(server, clock)
+    server.reply = failure
+    with pytest.raises(LlmError):
+        client.chat(MESSAGES)
+    server.reply = answer()
+    client.chat(MESSAGES)
+    assert clock.sleeps == [pytest.approx(6.0)]
+
+
+def test_a_refused_option_does_not_use_up_a_slot(server, clock):
+    # Nothing was sent: the next request does not have to wait.
+    client = paced_client(server, clock)
+    with pytest.raises(TypeError):
+        client.chat(MESSAGES, tools=[])
+    client.chat(MESSAGES)
+    assert clock.sleeps == []
+    assert len(server.requests) == 1
+
+
+def test_real_client_uses_a_monotonic_clock(server):
+    # The wall clock (time.time) can jump back, e.g. on an NTP sync: the wait would be wrong.
+    client = server.client()
+    assert client._clock is time.monotonic
+    assert client._sleep is time.sleep

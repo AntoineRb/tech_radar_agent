@@ -1,6 +1,6 @@
 [project]
 name = "tech-radar-agent"
-version = "0.3.0"
+version = "0.3.1"
 description = "A personal tech-watch agent that uses an LLM to curate a daily digest of developer news."
 readme = "README.md"
 license = "MIT"

@@ -38,6 +38,13 @@ The agent reads content written by strangers, sends it to an LLM, and puts the r
 |---|---|---|---|
 | [`actions/checkout`](https://github.com/actions/checkout) | GitHub | `3d3c42e5aac5ba805825da76410c181273ba90b1` (v7.0.1) | 2026-10-05: official repository, signed commit of the release tag |
 | [`astral-sh/setup-uv`](https://github.com/astral-sh/setup-uv) | Astral (uv) | `c18668ad3cf93ea998bef934396af7bb5c839dc7` (v10.2.0) | 2026-10-05: official repository, signed commit of the release tag |
+| [`actions/upload-artifact`](https://github.com/actions/upload-artifact) | GitHub | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (v7.0.1) | 2026-10-07: official repository, signed commit of the release tag. v7.0.2 was published the same morning: skipped until it has been out for a while |
+
+The daily run ([ADR 0030](decisions/0030-daily-run-on-github-actions.md)) adds three rules of its own:
+
+- **Secrets go to one step only**, the one that runs the agent, never to the whole job. Provider settings that are not secret are repository *variables*.
+- **The saved database is untrusted input** until its origin is checked. Anyone can open a pull request from a fork, and its workflow can upload an artifact with the same name. The restore step only takes an artifact uploaded by a run of this repository (`head_repository_id == repository_id`) on the default branch. A crafted database could otherwise put links into the digest or mark every article as sent.
+- **No `pull_request` trigger** on the daily run: it only runs on schedule or by hand, from the default branch, so code from a pull request never runs with its secrets.
 
 To update one: take the new release tag, resolve it with `git ls-remote https://github.com/<owner>/<repo> refs/tags/<tag> 'refs/tags/<tag>^{}'` (the `^{}` line, when present, is the commit), check that commit on the official repository, then replace the SHA and the version comment.
 

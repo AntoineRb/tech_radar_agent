@@ -279,6 +279,7 @@ def test_second_run_scores_nothing_again(llm):
         ("LLM_BASE_URL", None),  # Not configured at all.
         ("LLM_BASE_URL", "http://llm.example.com/v1"),  # Plain http to a remote host: refused.
         ("AGENT_SUMMARY_THRESHOLD", "eight"),
+        ("LLM_MIN_INTERVAL_SECONDS", "6000"),  # Milliseconds by mistake: refused, not hours of waiting.
     ],
 )
 def test_invalid_settings_skip_scoring_but_keep_the_collection(llm, monkeypatch, caplog, variable, value):
@@ -456,10 +457,57 @@ def test_preview_builds_the_digest_without_collecting_or_calling_the_llm(telegra
     assert sent_at() == [None, None]
 
 
-def test_dry_run_and_preview_cannot_be_combined():
+@pytest.mark.parametrize(
+    "options",
+    [["--dry-run", "--preview"], ["--dry-run", "--send-only"], ["--preview", "--send-only"]],
+    ids=["dry-run+preview", "dry-run+send-only", "preview+send-only"],
+)
+def test_run_modes_cannot_be_combined(options):
     with pytest.raises(SystemExit) as raised:
-        main(["--dry-run", "--preview"])
+        main(options)
     assert raised.value.code == 2
+
+
+# --- --send-only ---
+
+BROKEN_SOURCE = "sources:\n  - {type: fake, name: a, fail: true}\n"  # Would fail the run if collected.
+
+
+def test_send_only_sends_the_digest_without_collecting_or_calling_the_llm(telegram, llm):
+    run(ONE_SOURCE, PROFILE, "--dry-run")  # Scored once, nothing sent.
+    calls = len(llm.requests)
+    assert run(BROKEN_SOURCE, PROFILE, "--send-only") == EXIT_OK
+    assert len(llm.requests) == calls  # No LLM call...
+    assert "a 0" in telegram.texts[0] and "a 1" in telegram.texts[0]  # ...but the scored articles go out...
+    assert all(sent_at())  # ...and are marked, like in a normal run.
+
+
+def test_send_only_twice_never_resends_the_same_articles(telegram):
+    run(ONE_SOURCE, PROFILE, "--dry-run")
+    run(BROKEN_SOURCE, PROFILE, "--send-only")
+    assert run(BROKEN_SOURCE, PROFILE, "--send-only") == EXIT_OK
+    # The second time, nothing is left: the report says this run collected and scored nothing.
+    assert telegram.texts[1] == "Nothing scored today: 0 new articles collected."
+
+
+def test_send_only_with_an_empty_database_sends_the_empty_report(telegram):
+    assert run(BROKEN_SOURCE, PROFILE, "--send-only") == EXIT_OK
+    assert telegram.texts == ["Nothing scored today: 0 new articles collected."]
+
+
+def test_send_only_needs_telegram(telegram, monkeypatch, caplog):
+    run(ONE_SOURCE, PROFILE, "--dry-run")
+    monkeypatch.delenv("TELEGRAM_CHAT_ID")
+    assert run(BROKEN_SOURCE, PROFILE, "--send-only") == EXIT_DIGEST_NOT_SENT
+    assert sent_at() == [None, None]
+    assert "Digest not sent, invalid Telegram settings" in caplog.text
+
+
+def test_send_only_reports_a_failed_delivery(telegram):
+    run(ONE_SOURCE, PROFILE, "--dry-run")
+    telegram.statuses = [403]
+    assert run(BROKEN_SOURCE, PROFILE, "--send-only") == EXIT_DIGEST_NOT_SENT
+    assert sent_at() == [None, None]
 
 
 def test_telegram_token_never_logged(telegram, caplog):
